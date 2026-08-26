@@ -1,0 +1,115 @@
+import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+
+import { OsWindow } from '@/components/rechi-os/os-window';
+import type { DesktopWindow } from '@/hooks/use-window-manager';
+
+const windowState: DesktopWindow = {
+    key: 'profile',
+    title: 'PROFILE',
+    x: 160,
+    y: 90,
+    width: 420,
+    height: 260,
+    minimized: false,
+    maximized: false,
+    z: 8,
+};
+
+describe('OsWindow', () => {
+    it('renders controls and body content', () => {
+        render(
+            <OsWindow
+                windowState={windowState}
+                active
+                onFocus={vi.fn()}
+                onMinimize={vi.fn()}
+                onMaximize={vi.fn()}
+                onMove={vi.fn()}
+            >
+                <p>Profile content</p>
+            </OsWindow>,
+        );
+
+        expect(screen.getByLabelText('PROFILE window')).toBeInTheDocument();
+        expect(screen.getByText('Profile content')).toBeInTheDocument();
+    });
+
+    it('minimizes from the title bar control', async () => {
+        const minimize = vi.fn();
+
+        render(
+            <OsWindow
+                windowState={windowState}
+                active
+                onFocus={vi.fn()}
+                onMinimize={minimize}
+                onMaximize={vi.fn()}
+                onMove={vi.fn()}
+            >
+                <p>Profile content</p>
+            </OsWindow>,
+        );
+
+        await userEvent.click(screen.getByLabelText('Minimize PROFILE'));
+
+        expect(minimize).toHaveBeenCalledWith('profile');
+    });
+
+    it('maximizes and supports pointer dragging', async () => {
+        const maximize = vi.fn();
+        const move = vi.fn();
+        const focus = vi.fn();
+
+        render(
+            <OsWindow
+                windowState={windowState}
+                active
+                onFocus={focus}
+                onMinimize={vi.fn()}
+                onMaximize={maximize}
+                onMove={move}
+            >
+                <p>Profile content</p>
+            </OsWindow>,
+        );
+
+        await userEvent.click(screen.getByLabelText('Maximize PROFILE'));
+        expect(maximize).toHaveBeenCalledWith('profile');
+
+        const titleBar = screen.getByText('PROFILE')
+            .parentElement as HTMLElement;
+        fireEvent.pointerDown(titleBar, {
+            clientX: 180,
+            clientY: 110,
+            pointerId: 1,
+        });
+        fireEvent.pointerMove(titleBar, {
+            clientX: 220,
+            clientY: 140,
+            pointerId: 1,
+        });
+        fireEvent.pointerUp(titleBar, { pointerId: 1 });
+
+        expect(focus).toHaveBeenCalledWith('profile');
+        expect(move).toHaveBeenCalledWith('profile', 200, 120);
+    });
+
+    it('does not render minimized windows', () => {
+        render(
+            <OsWindow
+                windowState={{ ...windowState, minimized: true }}
+                active={false}
+                onFocus={vi.fn()}
+                onMinimize={vi.fn()}
+                onMaximize={vi.fn()}
+                onMove={vi.fn()}
+            >
+                <p>Hidden content</p>
+            </OsWindow>,
+        );
+
+        expect(screen.queryByText('Hidden content')).not.toBeInTheDocument();
+    });
+});

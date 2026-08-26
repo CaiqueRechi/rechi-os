@@ -1,0 +1,51 @@
+openapi: 3.1.0
+info:
+  title: Rechi OS API
+  version: 1.0.0
+servers:
+  - url: /api/v1
+paths:
+  /profile:
+    get:
+      summary: Get public profile
+      responses:
+        "200":
+          description: Public profile
+  /projects:
+    get:
+      summary: List public projects
+      responses:
+        "200":
+          description: Project collection
+  /projects/{slug}:
+    get:
+      summary: Get project case study
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project
+        "404":
+          description: Not found
+  /experiences:
+    get:
+      summary: List experiences
+      responses:
+        "200":
+          description: Experience collection
+  /skills:
+    get:
+      summary: List skills grouped by category
+      responses:
+        "200":
+          description: Skill categories
+  /social-links:
+    get:
+      summary: List public social links
+      responses:
+        "200":
+          description: Social links
