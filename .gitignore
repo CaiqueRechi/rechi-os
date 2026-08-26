@@ -4,6 +4,9 @@
 coverage
 /.npm-cache
 /.composer-cache
+/.agent
+/.agents
+/.codex
 /.codex-git
 /rechi-os-tmp
 /public/build
