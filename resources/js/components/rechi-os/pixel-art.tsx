@@ -5,6 +5,11 @@ const profileImages = Array.from(
     (_, index) =>
         `/assets/profile/profile-${String(index + 1).padStart(2, '0')}.png`,
 );
+const salemImages = Array.from(
+    { length: 6 },
+    (_, index) =>
+        `/assets/salem/salem-${String(index + 1).padStart(2, '0')}.png`,
+);
 
 export function PixelAvatar() {
     const [source] = useState(
@@ -22,21 +27,13 @@ export function PixelAvatar() {
 }
 
 export function PixelSalem() {
+    const [source] = useState(
+        () => salemImages[Math.floor(Math.random() * salemImages.length)],
+    );
+
     return (
-        <div
-            className="pixel-salem"
-            aria-label="Salem, black pixel art cat"
-            role="img"
-        >
-            <span className="tail" />
-            <span className="body" />
-            <span className="head" />
-            <span className="ear left" />
-            <span className="ear right" />
-            <span className="eye left" />
-            <span className="eye right" />
-            <span className="paw one" />
-            <span className="paw two" />
-        </div>
+        <figure className="pixel-salem" aria-label="Salem illustration">
+            <img src={source} alt="" aria-hidden="true" />
+        </figure>
     );
 }

@@ -15,8 +15,6 @@ describe('pixel art', () => {
         expect(
             screen.getByLabelText('Avatar illustration of Caique Rechi'),
         ).toBeInTheDocument();
-        expect(
-            screen.getByLabelText('Salem, black pixel art cat'),
-        ).toBeInTheDocument();
+        expect(screen.getByLabelText('Salem illustration')).toBeInTheDocument();
     });
 });
