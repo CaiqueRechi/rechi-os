@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Closure;
 use Illuminate\Support\Facades\Cache;
+use Traversable;
 
 class PortfolioCacheService
 {
@@ -25,7 +26,30 @@ class PortfolioCacheService
      */
     public function remember(string $key, Closure $resolver): mixed
     {
+        $value = Cache::get($key);
+
+        if ($this->containsIncompleteClass($value)) {
+            Cache::forget($key);
+        }
+
         return Cache::remember($key, now()->addMinutes(15), $resolver);
+    }
+
+    private function containsIncompleteClass(mixed $value): bool
+    {
+        if ($value instanceof \__PHP_Incomplete_Class) {
+            return true;
+        }
+
+        if (is_array($value) || $value instanceof Traversable) {
+            foreach ($value as $item) {
+                if ($this->containsIncompleteClass($item)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     public function forgetPublicPortfolio(): void
