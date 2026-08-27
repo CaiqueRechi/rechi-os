@@ -1,21 +1,19 @@
 # Hostinger Deploy
 
-This project deploys through GitHub Actions over SSH.
+This project deploys through GitHub Actions using the same FTP model as the
+previous portfolio repository.
 
-Required repository secrets:
+Configure these secrets in the `production` environment of this repository:
 
-- `HOSTINGER_HOST`: SSH host from Hostinger.
-- `HOSTINGER_PORT`: SSH port. Use `22` when empty.
-- `HOSTINGER_USER`: SSH user.
-- `HOSTINGER_SSH_KEY`: private SSH key authorized in Hostinger.
-- `HOSTINGER_APP_PATH`: app directory outside the public web root.
-- `HOSTINGER_PUBLIC_PATH`: domain web root, usually `public_html`.
-- `HOSTINGER_PHP_BINARY`: optional PHP binary path. Use `php` when empty.
-- `HOSTINGER_ENV`: full production `.env` contents.
+- `FTP_SERVER`
+- `FTP_USERNAME`
+- `FTP_PASSWORD`
+- `FTP_SERVER_DIR`
 
-`HOSTINGER_ENV` must include a valid `APP_KEY`, production `APP_URL`,
-database settings and any optional OpenAI/mail settings used by the app.
+`FTP_SERVER_DIR` should point to the Hostinger directory for the domain. Keep
+the production `.env` on the server and do not commit or upload it through the
+workflow.
 
-The workflow installs Composer dependencies, builds assets, uploads a release,
-links shared storage and `.env`, runs migrations, rebuilds Laravel caches and
-copies the current `public` directory to the configured public path.
+The workflow installs Composer and npm dependencies on GitHub Actions, builds
+the frontend, uploads `vendor/`, uploads the Laravel app, and then uploads the
+compiled public document root with an adjusted `index.php` for Hostinger.

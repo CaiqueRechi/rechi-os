@@ -1,4 +1,4 @@
-name: deploy
+name: Deploy Hostinger
 
 on:
   workflow_dispatch:
@@ -6,16 +6,16 @@ on:
     branches: [main]
 
 concurrency:
-  group: deploy-production
+  group: production-deploy
   cancel-in-progress: false
 
 permissions:
   contents: read
 
 jobs:
-  production:
+  deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     environment: production
 
     steps:
@@ -32,7 +32,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: "24"
+          node-version: "22"
           cache: npm
 
       - name: Install Dependencies
@@ -43,14 +43,59 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to Hostinger
-        env:
-          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
-          HOSTINGER_PORT: ${{ secrets.HOSTINGER_PORT }}
-          HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
-          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
-          HOSTINGER_APP_PATH: ${{ secrets.HOSTINGER_APP_PATH }}
-          HOSTINGER_PUBLIC_PATH: ${{ secrets.HOSTINGER_PUBLIC_PATH }}
-          HOSTINGER_PHP_BINARY: ${{ secrets.HOSTINGER_PHP_BINARY }}
-          HOSTINGER_ENV: ${{ secrets.HOSTINGER_ENV }}
-        run: bash scripts/deploy.sh
+      - name: Prepare public document root
+        run: |
+          mkdir -p .deploy-public
+          cp -a public/. .deploy-public/
+          sed -i "s#__DIR__.'/../vendor/autoload.php'#__DIR__.'/vendor/autoload.php'#" .deploy-public/index.php
+          sed -i "s#__DIR__.'/../bootstrap/app.php'#__DIR__.'/bootstrap/app.php'#" .deploy-public/index.php
+
+      - name: Deploy PHP dependencies by FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: vendor/
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}vendor/
+          state-name: .ftp-deploy-vendor-state.json
+
+      - name: Deploy application by FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          state-name: .ftp-deploy-app-state.json
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/.agent/**
+            **/.agents/**
+            **/.codex/**
+            **/.codex-git/**
+            **/.npm-cache/**
+            **/.deploy/**
+            **/.deploy-public/**
+            **/node_modules/**
+            **/vendor/**
+            .env
+            .env.*
+            public/hot
+            database/*.sqlite
+            storage/logs/**
+            storage/framework/cache/**
+            storage/framework/sessions/**
+            storage/framework/views/**
+
+      - name: Deploy public document root by FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: .deploy-public/
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}
+          state-name: .ftp-deploy-public-state.json
