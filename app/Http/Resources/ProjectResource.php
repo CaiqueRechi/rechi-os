@@ -26,6 +26,7 @@ class ProjectResource extends JsonResource
             'technical_decisions' => $this->technical_decisions,
             'architecture' => $this->architecture,
             'technologies' => $this->technologies,
+            'technology_badges' => $this->whenLoaded('skills', fn () => SkillResource::collection($this->skills)->resolve()),
             'results' => $this->results,
             'metrics' => $this->metrics,
             'demo_url' => $this->demo_url,

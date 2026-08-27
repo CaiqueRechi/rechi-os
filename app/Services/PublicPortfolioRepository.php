@@ -29,7 +29,7 @@ class PublicPortfolioRepository
         return $this->cache->remember(
             PortfolioCacheService::PROJECTS,
             fn () => Project::query()
-                ->with('images')
+                ->with(['images', 'skills'])
                 ->where('status', 'published')
                 ->orderBy('sort_order')
                 ->get(),
@@ -41,7 +41,7 @@ class PublicPortfolioRepository
         return $this->cache->remember(
             "portfolio:project:{$slug}",
             fn () => Project::query()
-                ->with('images')
+                ->with(['images', 'skills'])
                 ->where('status', 'published')
                 ->where('slug', $slug)
                 ->first(),
@@ -55,7 +55,7 @@ class PublicPortfolioRepository
     {
         return $this->cache->remember(
             PortfolioCacheService::EXPERIENCES,
-            fn () => Experience::query()->orderBy('sort_order')->get(),
+            fn () => Experience::query()->with('skills')->orderBy('sort_order')->get(),
         );
     }
 

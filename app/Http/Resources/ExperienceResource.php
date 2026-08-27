@@ -19,10 +19,14 @@ class ExperienceResource extends JsonResource
         return [
             'role' => $this->role,
             'company' => $this->company,
+            'location' => $this->location,
+            'employment_type' => $this->employment_type,
             'summary' => $this->summary,
+            'achievements' => $this->achievements ?? [],
             'started_at' => (string) $this->started_at,
             'ended_at' => $this->ended_at ? (string) $this->ended_at : null,
             'current' => $this->current,
+            'technologies' => $this->whenLoaded('skills', fn () => SkillResource::collection($this->skills)->resolve()),
         ];
     }
 }

@@ -25,6 +25,8 @@ class ProfileResource extends JsonResource
             'avatar_path' => $this->avatar_path,
             'resume_url' => $this->resume_url,
             'contact_email' => $this->contact_email,
+            'phone' => $this->phone,
+            'website_url' => $this->website_url,
         ];
     }
 }

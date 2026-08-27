@@ -363,7 +363,9 @@ function ProfilePanel({
                         .flatMap((category) => category.skills)
                         .slice(0, 8)
                         .map((skill) => (
-                            <span key={skill.slug}>{skill.name}</span>
+                            <span key={skill.slug}>
+                                {skill.badge_label ?? skill.name}
+                            </span>
                         ))}
                 </div>
                 <div className="action-row">
@@ -432,6 +434,10 @@ function ProjectsPanel({
                             <span key={item}>{item}</span>
                         ))}
                     </div>
+                    <TechnologyRow
+                        skills={selectedProject.technology_badges}
+                        fallback={selectedProject.technologies}
+                    />
                     <div className="case-columns">
                         <section>
                             <h3>Responsibilities</h3>
@@ -518,8 +524,27 @@ function ExperiencePanel({ experiences }: { experiences: Experience[] }) {
                 <li key={`${experience.role}-${experience.started_at}`}>
                     <time>{new Date(experience.started_at).getFullYear()}</time>
                     <strong>{experience.role}</strong>
-                    <span>{experience.company}</span>
+                    <span>
+                        {experience.company}
+                        {experience.employment_type
+                            ? ` - ${experience.employment_type}`
+                            : ''}
+                    </span>
+                    {experience.location && (
+                        <span className="timeline-location">
+                            {experience.location}
+                        </span>
+                    )}
                     <p>{experience.summary}</p>
+                    {experience.achievements &&
+                        experience.achievements.length > 0 && (
+                            <ul>
+                                {experience.achievements.map((item) => (
+                                    <li key={item}>{item}</li>
+                                ))}
+                            </ul>
+                        )}
+                    <TechnologyRow skills={experience.technologies} />
                 </li>
             ))}
         </ol>
@@ -536,10 +561,67 @@ function StackPanel({ skills }: { skills: SkillCategory[] }) {
                     </h3>
                     <div>
                         {category.skills.map((skill) => (
-                            <span key={skill.slug}>{skill.name}</span>
+                            <span
+                                key={skill.slug}
+                                title={`${skill.proficiency_level} - ${skill.years_experience} years`}
+                                style={{
+                                    borderColor: skill.badge_color
+                                        ? `${skill.badge_color}88`
+                                        : undefined,
+                                }}
+                            >
+                                <strong>
+                                    {skill.badge_label ?? skill.name}
+                                </strong>
+                                <small>
+                                    {skill.years_experience}y -{' '}
+                                    {skill.proficiency_level}
+                                </small>
+                            </span>
                         ))}
                     </div>
                 </section>
+            ))}
+        </div>
+    );
+}
+
+function TechnologyRow({
+    skills,
+    fallback = [],
+}: {
+    skills?: Array<{
+        badge_label?: string | null;
+        name: string;
+        slug: string;
+        years_experience?: number;
+        proficiency_level?: string;
+    }>;
+    fallback?: string[];
+}) {
+    const labels =
+        skills && skills.length > 0
+            ? skills.map((skill) => ({
+                  key: skill.slug,
+                  label: skill.badge_label ?? skill.name,
+                  meta:
+                      skill.years_experience && skill.proficiency_level
+                          ? `${skill.years_experience}y ${skill.proficiency_level}`
+                          : null,
+              }))
+            : fallback.map((label) => ({ key: label, label, meta: null }));
+
+    if (labels.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="tech-row">
+            {labels.map((skill) => (
+                <span key={skill.key}>
+                    {skill.label}
+                    {skill.meta && <small>{skill.meta}</small>}
+                </span>
             ))}
         </div>
     );

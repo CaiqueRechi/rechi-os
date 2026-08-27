@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Http\Resources\ExperienceResource;
 use App\Http\Resources\ProfileResource;
 use App\Http\Resources\ProjectResource;
+use App\Http\Resources\SkillResource;
 use App\Http\Resources\SocialLinkResource;
-use App\Models\Skill;
 use App\Models\SkillCategory;
 use App\Services\PublicPortfolioRepository;
 use Inertia\Inertia;
@@ -25,11 +25,7 @@ class PortfolioController extends Controller
             'skills' => $portfolio->skills()->map(fn (SkillCategory $category) => [
                 'name' => $category->name,
                 'slug' => $category->slug,
-                'skills' => $category->skills->map(fn (Skill $skill) => [
-                    'name' => $skill->name,
-                    'slug' => $skill->slug,
-                    'summary' => $skill->summary,
-                ])->values()->all(),
+                'skills' => SkillResource::collection($category->skills)->resolve(),
             ])->values(),
             'socialLinks' => SocialLinkResource::collection($portfolio->socialLinks())->resolve(),
         ]);

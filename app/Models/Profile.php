@@ -22,6 +22,8 @@ class Profile extends Model
         'avatar_path',
         'resume_url',
         'contact_email',
+        'phone',
+        'website_url',
         'ai_base_prompt',
     ];
 

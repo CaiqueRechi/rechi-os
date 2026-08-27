@@ -465,7 +465,8 @@
 
     .chip-row,
     .action-row,
-    .metric-row {
+    .metric-row,
+    .tech-row {
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
@@ -473,12 +474,25 @@
     }
 
     .chip-row span,
+    .tech-row span,
     .stack-grid span {
         border: 1px solid rgb(212 160 71 / 0.28);
         border-radius: 6px;
         padding: 8px 12px;
         color: var(--os-cream);
         background: rgb(83 61 100 / 0.22);
+    }
+
+    .tech-row span {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .tech-row small,
+    .stack-grid small {
+        color: rgb(255 251 234 / 0.54);
+        font-size: 0.72rem;
     }
 
     .action-row a,
@@ -543,6 +557,7 @@
     .case-study p,
     .case-study li,
     .timeline p,
+    .timeline li li,
     .timeline span {
         color: rgb(255 251 234 / 0.68);
     }
@@ -662,6 +677,17 @@
         color: var(--os-cream);
     }
 
+    .timeline-location {
+        display: block;
+        margin-top: 4px;
+    }
+
+    .timeline ul {
+        margin-top: 10px;
+        list-style: disc;
+        padding-left: 18px;
+    }
+
     .stack-grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -679,6 +705,15 @@
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+    }
+
+    .stack-grid span {
+        display: grid;
+        gap: 4px;
+    }
+
+    .stack-grid span strong {
+        color: var(--os-cream);
     }
 
     .contact-form,

@@ -5,6 +5,7 @@ namespace App\Models;
 use Database\Factories\ExperienceFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Experience extends Model
@@ -15,7 +16,10 @@ class Experience extends Model
     protected $fillable = [
         'role',
         'company',
+        'location',
+        'employment_type',
         'summary',
+        'achievements',
         'started_at',
         'ended_at',
         'current',
@@ -27,7 +31,16 @@ class Experience extends Model
         return [
             'started_at' => 'date',
             'ended_at' => 'date',
+            'achievements' => 'array',
             'current' => 'boolean',
         ];
+    }
+
+    /** @return BelongsToMany<Skill, $this> */
+    public function skills(): BelongsToMany
+    {
+        return $this->belongsToMany(Skill::class)
+            ->withPivot(['context', 'sort_order'])
+            ->orderByPivot('sort_order');
     }
 }
