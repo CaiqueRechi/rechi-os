@@ -2,6 +2,8 @@ name: deploy
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 concurrency:
   group: deploy-production
@@ -24,6 +26,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: "8.3"
+          extensions: mbstring, dom, fileinfo, mysql, pdo_mysql, redis
           tools: composer:v2
 
       - name: Setup Node
@@ -40,9 +43,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy Placeholder
+      - name: Deploy to Hostinger
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+          HOSTINGER_PORT: ${{ secrets.HOSTINGER_PORT }}
+          HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
+          HOSTINGER_SSH_KEY: ${{ secrets.HOSTINGER_SSH_KEY }}
+          HOSTINGER_APP_PATH: ${{ secrets.HOSTINGER_APP_PATH }}
+          HOSTINGER_PUBLIC_PATH: ${{ secrets.HOSTINGER_PUBLIC_PATH }}
+          HOSTINGER_PHP_BINARY: ${{ secrets.HOSTINGER_PHP_BINARY }}
+          HOSTINGER_ENV: ${{ secrets.HOSTINGER_ENV }}
         run: bash scripts/deploy.sh
