@@ -92,6 +92,9 @@ jobs:
       - name: NPM Install
         run: npm ci
 
+      - name: Generate Wayfinder Types
+        run: php artisan wayfinder:generate --with-form --no-interaction
+
       - name: Laravel Pint
         run: vendor/bin/pint --test --parallel
 
