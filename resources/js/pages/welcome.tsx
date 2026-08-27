@@ -275,7 +275,9 @@ export default function Welcome({
 function TopBar() {
     return (
         <header className="top-bar">
-            <strong>RECHI OS</strong>
+            <strong className="top-bar-brand">
+                <img src="/assets/brand/logo.svg" alt="RECHI OS" />
+            </strong>
             <div
                 className="top-indicators"
                 aria-label="decorative system indicators"

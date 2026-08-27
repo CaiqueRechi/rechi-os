@@ -1,6 +1,6 @@
 import { Minus, Square, X } from 'lucide-react';
 import type { CSSProperties, PointerEvent, ReactNode } from 'react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 import type {
     DesktopWindow,
@@ -49,6 +49,8 @@ export function OsWindow({
 }: OsWindowProps) {
     const dragOffset = useRef({ x: 0, y: 0 });
     const dragging = useRef(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const [edgeHit, setEdgeHit] = useState(false);
     const resizing = useRef<{
         direction: ResizeDirection;
         pointerX: number;
@@ -71,6 +73,7 @@ export function OsWindow({
             y: event.clientY - windowState.y,
         };
         dragging.current = true;
+        setIsDragging(true);
 
         if (event.currentTarget.setPointerCapture) {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -82,15 +85,25 @@ export function OsWindow({
             return;
         }
 
-        onMove(
-            windowState.key,
-            event.clientX - dragOffset.current.x,
-            event.clientY - dragOffset.current.y,
+        const requestedX = event.clientX - dragOffset.current.x;
+        const requestedY = event.clientY - dragOffset.current.y;
+        const maxX = Math.max(152, window.innerWidth - 280);
+        const maxY = Math.max(64, window.innerHeight - 120);
+
+        setEdgeHit(
+            requestedX <= 152 ||
+                requestedX >= maxX ||
+                requestedY <= 64 ||
+                requestedY >= maxY,
         );
+
+        onMove(windowState.key, requestedX, requestedY);
     };
 
     const endDrag = () => {
         dragging.current = false;
+        setIsDragging(false);
+        setEdgeHit(false);
     };
 
     const startResize =
@@ -200,7 +213,7 @@ export function OsWindow({
 
     return (
         <section
-            className={`os-window ${active ? 'is-active' : ''} ${windowState.maximized ? 'is-maximized' : ''}`}
+            className={`os-window ${active ? 'is-active' : ''} ${windowState.maximized ? 'is-maximized' : ''} ${isDragging ? 'is-dragging' : ''} ${edgeHit ? 'is-edge-hit' : ''}`}
             style={style}
             onMouseDown={() => onFocus(windowState.key)}
             aria-label={`${windowState.title} window`}

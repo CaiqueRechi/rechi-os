@@ -139,6 +139,43 @@ describe('OsWindow', () => {
         });
     });
 
+    it('adds a soft edge hint while dragging against desktop bounds', () => {
+        render(
+            <OsWindow
+                windowState={windowState}
+                active
+                onFocus={vi.fn()}
+                onMinimize={vi.fn()}
+                onMaximize={vi.fn()}
+                onMove={vi.fn()}
+                onResize={vi.fn()}
+            >
+                <p>Profile content</p>
+            </OsWindow>,
+        );
+
+        const windowElement = screen.getByLabelText('PROFILE window');
+        const titleBar = screen.getByText('PROFILE')
+            .parentElement as HTMLElement;
+
+        fireEvent.pointerDown(titleBar, {
+            clientX: 180,
+            clientY: 110,
+            pointerId: 1,
+        });
+        fireEvent.pointerMove(titleBar, {
+            clientX: 0,
+            clientY: 0,
+            pointerId: 1,
+        });
+
+        expect(windowElement).toHaveClass('is-edge-hit');
+
+        fireEvent.pointerUp(titleBar, { pointerId: 1 });
+
+        expect(windowElement).not.toHaveClass('is-edge-hit');
+    });
+
     it('does not render minimized windows', () => {
         render(
             <OsWindow

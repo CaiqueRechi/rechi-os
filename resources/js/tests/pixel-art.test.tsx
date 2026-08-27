@@ -13,7 +13,7 @@ describe('pixel art', () => {
         );
 
         expect(
-            screen.getByLabelText('Pixel art avatar of Caique Rechi'),
+            screen.getByLabelText('Avatar illustration of Caique Rechi'),
         ).toBeInTheDocument();
         expect(
             screen.getByLabelText('Salem, black pixel art cat'),

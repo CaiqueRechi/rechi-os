@@ -1,18 +1,23 @@
+import { useState } from 'react';
+
+const profileImages = Array.from(
+    { length: 16 },
+    (_, index) =>
+        `/assets/profile/profile-${String(index + 1).padStart(2, '0')}.png`,
+);
+
 export function PixelAvatar() {
+    const [source] = useState(
+        () => profileImages[Math.floor(Math.random() * profileImages.length)],
+    );
+
     return (
-        <div
+        <figure
             className="pixel-avatar"
-            aria-label="Pixel art avatar of Caique Rechi"
-            role="img"
+            aria-label="Avatar illustration of Caique Rechi"
         >
-            <span className="hair" />
-            <span className="face" />
-            <span className="beard" />
-            <span className="hood" />
-            <span className="neck" />
-            <span className="eye left" />
-            <span className="eye right" />
-        </div>
+            <img src={source} alt="" aria-hidden="true" />
+        </figure>
     );
 }
 
