@@ -27,6 +27,7 @@ describe('OsWindow', () => {
                 onMinimize={vi.fn()}
                 onMaximize={vi.fn()}
                 onMove={vi.fn()}
+                onResize={vi.fn()}
             >
                 <p>Profile content</p>
             </OsWindow>,
@@ -47,6 +48,7 @@ describe('OsWindow', () => {
                 onMinimize={minimize}
                 onMaximize={vi.fn()}
                 onMove={vi.fn()}
+                onResize={vi.fn()}
             >
                 <p>Profile content</p>
             </OsWindow>,
@@ -70,6 +72,7 @@ describe('OsWindow', () => {
                 onMinimize={vi.fn()}
                 onMaximize={maximize}
                 onMove={move}
+                onResize={vi.fn()}
             >
                 <p>Profile content</p>
             </OsWindow>,
@@ -96,6 +99,46 @@ describe('OsWindow', () => {
         expect(move).toHaveBeenCalledWith('profile', 200, 120);
     });
 
+    it('resizes from the southeast handle', () => {
+        const resize = vi.fn();
+        const focus = vi.fn();
+
+        render(
+            <OsWindow
+                windowState={windowState}
+                active
+                onFocus={focus}
+                onMinimize={vi.fn()}
+                onMaximize={vi.fn()}
+                onMove={vi.fn()}
+                onResize={resize}
+            >
+                <p>Profile content</p>
+            </OsWindow>,
+        );
+
+        const handle = screen.getByLabelText('Resize PROFILE se');
+        fireEvent.pointerDown(handle, {
+            clientX: 580,
+            clientY: 350,
+            pointerId: 1,
+        });
+        fireEvent.pointerMove(handle, {
+            clientX: 640,
+            clientY: 390,
+            pointerId: 1,
+        });
+        fireEvent.pointerUp(handle, { pointerId: 1 });
+
+        expect(focus).toHaveBeenCalledWith('profile');
+        expect(resize).toHaveBeenCalledWith('profile', {
+            height: 300,
+            width: 480,
+            x: 160,
+            y: 90,
+        });
+    });
+
     it('does not render minimized windows', () => {
         render(
             <OsWindow
@@ -105,6 +148,7 @@ describe('OsWindow', () => {
                 onMinimize={vi.fn()}
                 onMaximize={vi.fn()}
                 onMove={vi.fn()}
+                onResize={vi.fn()}
             >
                 <p>Hidden content</p>
             </OsWindow>,

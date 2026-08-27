@@ -1,8 +1,14 @@
 import { Minus, Square, X } from 'lucide-react';
-import type { PointerEvent, ReactNode } from 'react';
+import type { CSSProperties, PointerEvent, ReactNode } from 'react';
 import { useRef } from 'react';
 
-import type { DesktopWindow, WindowKey } from '@/hooks/use-window-manager';
+import type {
+    DesktopWindow,
+    WindowKey,
+    WindowRect,
+} from '@/hooks/use-window-manager';
+
+type ResizeDirection = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
 
 type OsWindowProps = {
     windowState: DesktopWindow;
@@ -12,7 +18,24 @@ type OsWindowProps = {
     onMinimize: (key: WindowKey) => void;
     onMaximize: (key: WindowKey) => void;
     onMove: (key: WindowKey, x: number, y: number) => void;
+    onResize: (key: WindowKey, rect: WindowRect) => void;
 };
+
+const minSize = {
+    height: 180,
+    width: 320,
+};
+
+const resizeDirections: ResizeDirection[] = [
+    'n',
+    'ne',
+    'e',
+    'se',
+    's',
+    'sw',
+    'w',
+    'nw',
+];
 
 export function OsWindow({
     windowState,
@@ -22,9 +45,16 @@ export function OsWindow({
     onMinimize,
     onMaximize,
     onMove,
+    onResize,
 }: OsWindowProps) {
     const dragOffset = useRef({ x: 0, y: 0 });
     const dragging = useRef(false);
+    const resizing = useRef<{
+        direction: ResizeDirection;
+        pointerX: number;
+        pointerY: number;
+        rect: WindowRect;
+    } | null>(null);
 
     if (windowState.minimized) {
         return null;
@@ -63,13 +93,108 @@ export function OsWindow({
         dragging.current = false;
     };
 
-    const style = windowState.maximized
+    const startResize =
+        (direction: ResizeDirection) =>
+        (event: PointerEvent<HTMLButtonElement>) => {
+            if (windowState.maximized) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            onFocus(windowState.key);
+            resizing.current = {
+                direction,
+                pointerX: event.clientX,
+                pointerY: event.clientY,
+                rect: {
+                    height: windowState.height,
+                    width: windowState.width,
+                    x: windowState.x,
+                    y: windowState.y,
+                },
+            };
+
+            if (event.currentTarget.setPointerCapture) {
+                event.currentTarget.setPointerCapture(event.pointerId);
+            }
+        };
+
+    const resizeWindow = (event: PointerEvent<HTMLButtonElement>) => {
+        if (!resizing.current) {
+            return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const { direction, pointerX, pointerY, rect } = resizing.current;
+        const deltaX = event.clientX - pointerX;
+        const deltaY = event.clientY - pointerY;
+        const desktopBounds = {
+            bottom: Math.max(64 + minSize.height, window.innerHeight - 20),
+            left: 152,
+            right: Math.max(152 + minSize.width, window.innerWidth - 20),
+            top: 58,
+        };
+
+        let nextX = rect.x;
+        let nextY = rect.y;
+        let nextWidth = rect.width;
+        let nextHeight = rect.height;
+
+        if (direction.includes('e')) {
+            nextWidth = Math.min(
+                Math.max(minSize.width, rect.width + deltaX),
+                desktopBounds.right - rect.x,
+            );
+        }
+
+        if (direction.includes('s')) {
+            nextHeight = Math.min(
+                Math.max(minSize.height, rect.height + deltaY),
+                desktopBounds.bottom - rect.y,
+            );
+        }
+
+        if (direction.includes('w')) {
+            const rightEdge = rect.x + rect.width;
+            nextX = Math.min(
+                Math.max(desktopBounds.left, rect.x + deltaX),
+                rightEdge - minSize.width,
+            );
+            nextWidth = rightEdge - nextX;
+        }
+
+        if (direction.includes('n')) {
+            const bottomEdge = rect.y + rect.height;
+            nextY = Math.min(
+                Math.max(desktopBounds.top, rect.y + deltaY),
+                bottomEdge - minSize.height,
+            );
+            nextHeight = bottomEdge - nextY;
+        }
+
+        onResize(windowState.key, {
+            height: nextHeight,
+            width: nextWidth,
+            x: nextX,
+            y: nextY,
+        });
+    };
+
+    const endResize = (event: PointerEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        resizing.current = null;
+    };
+
+    const style: CSSProperties = windowState.maximized
         ? { inset: '58px 20px 20px 164px', zIndex: windowState.z }
         : {
               left: windowState.x,
               top: windowState.y,
               width: windowState.width,
-              minHeight: windowState.height,
+              height: windowState.height,
               zIndex: windowState.z,
           };
 
@@ -113,6 +238,19 @@ export function OsWindow({
                 </div>
             </div>
             <div className="os-window-body">{children}</div>
+            {!windowState.maximized &&
+                resizeDirections.map((direction) => (
+                    <button
+                        key={direction}
+                        type="button"
+                        className={`resize-handle resize-${direction}`}
+                        aria-label={`Resize ${windowState.title} ${direction}`}
+                        onPointerDown={startResize(direction)}
+                        onPointerMove={resizeWindow}
+                        onPointerUp={endResize}
+                        onPointerCancel={endResize}
+                    />
+                ))}
         </section>
     );
 }

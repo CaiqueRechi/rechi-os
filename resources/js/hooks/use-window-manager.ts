@@ -21,6 +21,8 @@ export type DesktopWindow = {
     z: number;
 };
 
+export type WindowRect = Pick<DesktopWindow, 'height' | 'width' | 'x' | 'y'>;
+
 const initialWindows: DesktopWindow[] = [
     {
         key: 'profile',
@@ -162,5 +164,20 @@ export function useWindowManager() {
         );
     }, []);
 
-    return { windows, topZ, focus, minimize, toggleMaximize, move };
+    const resize = useCallback((key: WindowKey, rect: WindowRect) => {
+        setWindows((current) =>
+            current.map((item) =>
+                item.key === key
+                    ? {
+                          ...item,
+                          ...rect,
+                          maximized: false,
+                          z: Math.max(...current.map((window) => window.z)) + 1,
+                      }
+                    : item,
+            ),
+        );
+    }, []);
+
+    return { windows, topZ, focus, minimize, toggleMaximize, move, resize };
 }

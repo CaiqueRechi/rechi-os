@@ -62,7 +62,7 @@ export default function Welcome({
 }: WelcomeProps) {
     const page = usePage();
     const dataProfile = profile ?? fallbackProfile;
-    const { windows, topZ, focus, minimize, toggleMaximize, move } =
+    const { windows, topZ, focus, minimize, toggleMaximize, move, resize } =
         useWindowManager();
     const [selectedProject, setSelectedProject] = useState(projects[0]);
     const [terminalLines, setTerminalLines] = useState<string[]>([
@@ -204,6 +204,7 @@ export default function Welcome({
                             onMinimize={minimize}
                             onMaximize={toggleMaximize}
                             onMove={move}
+                            onResize={resize}
                         >
                             {windowState.key === 'profile' && (
                                 <ProfilePanel
