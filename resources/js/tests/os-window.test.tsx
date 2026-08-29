@@ -12,6 +12,7 @@ const windowState: DesktopWindow = {
     y: 90,
     width: 420,
     height: 260,
+    closed: false,
     minimized: false,
     maximized: false,
     z: 8,
@@ -25,6 +26,7 @@ describe('OsWindow', () => {
                 active
                 onFocus={vi.fn()}
                 onMinimize={vi.fn()}
+                onClose={vi.fn()}
                 onMaximize={vi.fn()}
                 onMove={vi.fn()}
                 onResize={vi.fn()}
@@ -46,6 +48,7 @@ describe('OsWindow', () => {
                 active
                 onFocus={vi.fn()}
                 onMinimize={minimize}
+                onClose={vi.fn()}
                 onMaximize={vi.fn()}
                 onMove={vi.fn()}
                 onResize={vi.fn()}
@@ -59,6 +62,31 @@ describe('OsWindow', () => {
         expect(minimize).toHaveBeenCalledWith('profile');
     });
 
+    it('closes from the title bar control without starting a drag', async () => {
+        const close = vi.fn();
+        const focus = vi.fn();
+
+        render(
+            <OsWindow
+                windowState={windowState}
+                active
+                onFocus={focus}
+                onMinimize={vi.fn()}
+                onClose={close}
+                onMaximize={vi.fn()}
+                onMove={vi.fn()}
+                onResize={vi.fn()}
+            >
+                <p>Profile content</p>
+            </OsWindow>,
+        );
+
+        await userEvent.click(screen.getByLabelText('Close PROFILE'));
+
+        expect(close).toHaveBeenCalledWith('profile');
+        expect(focus).not.toHaveBeenCalled();
+    });
+
     it('maximizes and supports pointer dragging', async () => {
         const maximize = vi.fn();
         const move = vi.fn();
@@ -70,6 +98,7 @@ describe('OsWindow', () => {
                 active
                 onFocus={focus}
                 onMinimize={vi.fn()}
+                onClose={vi.fn()}
                 onMaximize={maximize}
                 onMove={move}
                 onResize={vi.fn()}
@@ -109,6 +138,7 @@ describe('OsWindow', () => {
                 active
                 onFocus={focus}
                 onMinimize={vi.fn()}
+                onClose={vi.fn()}
                 onMaximize={vi.fn()}
                 onMove={vi.fn()}
                 onResize={resize}
@@ -146,6 +176,7 @@ describe('OsWindow', () => {
                 active={false}
                 onFocus={vi.fn()}
                 onMinimize={vi.fn()}
+                onClose={vi.fn()}
                 onMaximize={vi.fn()}
                 onMove={vi.fn()}
                 onResize={vi.fn()}
@@ -155,5 +186,24 @@ describe('OsWindow', () => {
         );
 
         expect(screen.queryByText('Hidden content')).not.toBeInTheDocument();
+    });
+
+    it('does not render closed windows', () => {
+        render(
+            <OsWindow
+                windowState={{ ...windowState, closed: true }}
+                active={false}
+                onFocus={vi.fn()}
+                onMinimize={vi.fn()}
+                onClose={vi.fn()}
+                onMaximize={vi.fn()}
+                onMove={vi.fn()}
+                onResize={vi.fn()}
+            >
+                <p>Closed content</p>
+            </OsWindow>,
+        );
+
+        expect(screen.queryByText('Closed content')).not.toBeInTheDocument();
     });
 });

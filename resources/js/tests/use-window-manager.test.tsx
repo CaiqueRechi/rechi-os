@@ -21,6 +21,22 @@ describe('useWindowManager', () => {
                 ?.minimized,
         ).toBe(true);
 
+        act(() => result.current.close('profile'));
+        expect(
+            result.current.windows.find((window) => window.key === 'profile'),
+        ).toMatchObject({
+            closed: true,
+            minimized: false,
+        });
+
+        act(() => result.current.focus('profile'));
+        expect(
+            result.current.windows.find((window) => window.key === 'profile'),
+        ).toMatchObject({
+            closed: false,
+            minimized: false,
+        });
+
         act(() => result.current.toggleMaximize('profile'));
         expect(
             result.current.windows.find((window) => window.key === 'profile'),
