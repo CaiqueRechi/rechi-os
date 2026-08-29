@@ -15,6 +15,8 @@ Superficies principais: formulario de contato, login/admin, API publica, Ask Rec
 - OpenAI somente pelo backend.
 - Logs sem corpo integral das perguntas/mensagens sensiveis no Telescope.
 - Cache invalidado por chave, sem `Cache::flush()`.
+- CSP libera o servidor Vite em `127.0.0.1:5173` somente no ambiente local;
+  producao continua restrita a assets da propria origem.
 
 ## Protected Data
 
