@@ -18,6 +18,10 @@ devem ser repetidas diretamente nas telas.
 
 Rechi OS usa janelas com titlebar roxa, botoes de minimizar/maximizar/fechar, dock lateral, textura discreta, brilho laranja perto do piso e pixel art feita com componentes reais.
 
+Minimizar esconde a janela mantendo-a disponivel no dock. Fechar remove a janela
+do desktop; selecionar o aplicativo no dock abre a janela novamente. Maximizar
+alterna entre a area util inteira e o tamanho anterior.
+
 No mobile, apps viram paineis empilhados em vez de tentar comprimir o desktop.
 
 ## Brand mark
