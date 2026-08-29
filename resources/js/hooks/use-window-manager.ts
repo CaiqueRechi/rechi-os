@@ -16,6 +16,7 @@ export type DesktopWindow = {
     y: number;
     width: number;
     height: number;
+    closed: boolean;
     minimized: boolean;
     maximized: boolean;
     z: number;
@@ -31,6 +32,7 @@ const initialWindows: DesktopWindow[] = [
         y: 128,
         width: 760,
         height: 460,
+        closed: false,
         minimized: false,
         maximized: false,
         z: 2,
@@ -42,6 +44,7 @@ const initialWindows: DesktopWindow[] = [
         y: 230,
         width: 420,
         height: 390,
+        closed: false,
         minimized: false,
         maximized: false,
         z: 3,
@@ -53,6 +56,7 @@ const initialWindows: DesktopWindow[] = [
         y: 620,
         width: 560,
         height: 190,
+        closed: false,
         minimized: false,
         maximized: false,
         z: 4,
@@ -64,6 +68,7 @@ const initialWindows: DesktopWindow[] = [
         y: 180,
         width: 680,
         height: 370,
+        closed: false,
         minimized: true,
         maximized: false,
         z: 1,
@@ -75,6 +80,7 @@ const initialWindows: DesktopWindow[] = [
         y: 640,
         width: 430,
         height: 260,
+        closed: false,
         minimized: true,
         maximized: false,
         z: 1,
@@ -86,6 +92,7 @@ const initialWindows: DesktopWindow[] = [
         y: 160,
         width: 470,
         height: 420,
+        closed: false,
         minimized: true,
         maximized: false,
         z: 1,
@@ -97,6 +104,7 @@ const initialWindows: DesktopWindow[] = [
         y: 110,
         width: 420,
         height: 260,
+        closed: false,
         minimized: true,
         maximized: false,
         z: 1,
@@ -105,10 +113,15 @@ const initialWindows: DesktopWindow[] = [
 
 export function useWindowManager() {
     const [windows, setWindows] = useState(initialWindows);
-    const topZ = useMemo(
-        () => Math.max(...windows.map((window) => window.z)),
-        [windows],
-    );
+    const topZ = useMemo(() => {
+        const visibleWindows = windows.filter(
+            (window) => !window.closed && !window.minimized,
+        );
+
+        return visibleWindows.length > 0
+            ? Math.max(...visibleWindows.map((window) => window.z))
+            : 0;
+    }, [windows]);
 
     const focus = useCallback((key: WindowKey) => {
         setWindows((current) =>
@@ -116,6 +129,7 @@ export function useWindowManager() {
                 window.key === key
                     ? {
                           ...window,
+                          closed: false,
                           minimized: false,
                           z: Math.max(...current.map((item) => item.z)) + 1,
                       }
@@ -128,6 +142,16 @@ export function useWindowManager() {
         setWindows((current) =>
             current.map((window) =>
                 window.key === key ? { ...window, minimized: true } : window,
+            ),
+        );
+    }, []);
+
+    const close = useCallback((key: WindowKey) => {
+        setWindows((current) =>
+            current.map((window) =>
+                window.key === key
+                    ? { ...window, closed: true, minimized: false }
+                    : window,
             ),
         );
     }, []);
@@ -179,5 +203,14 @@ export function useWindowManager() {
         );
     }, []);
 
-    return { windows, topZ, focus, minimize, toggleMaximize, move, resize };
+    return {
+        windows,
+        topZ,
+        focus,
+        minimize,
+        close,
+        toggleMaximize,
+        move,
+        resize,
+    };
 }

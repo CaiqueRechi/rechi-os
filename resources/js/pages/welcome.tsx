@@ -62,8 +62,16 @@ export default function Welcome({
 }: WelcomeProps) {
     const page = usePage();
     const dataProfile = profile ?? fallbackProfile;
-    const { windows, topZ, focus, minimize, toggleMaximize, move, resize } =
-        useWindowManager();
+    const {
+        windows,
+        topZ,
+        focus,
+        minimize,
+        close,
+        toggleMaximize,
+        move,
+        resize,
+    } = useWindowManager();
     const [selectedProject, setSelectedProject] = useState(projects[0]);
     const [terminalLines, setTerminalLines] = useState<string[]>([
         'rechi@os:~$ status',
@@ -76,7 +84,11 @@ export default function Welcome({
     );
 
     const activeWindow = useMemo(
-        () => windows.find((window) => window.z === topZ)?.key,
+        () =>
+            windows.find(
+                (window) =>
+                    !window.closed && !window.minimized && window.z === topZ,
+            )?.key,
         [topZ, windows],
     );
 
@@ -202,6 +214,7 @@ export default function Welcome({
                             active={activeWindow === windowState.key}
                             onFocus={focus}
                             onMinimize={minimize}
+                            onClose={close}
                             onMaximize={toggleMaximize}
                             onMove={move}
                             onResize={resize}

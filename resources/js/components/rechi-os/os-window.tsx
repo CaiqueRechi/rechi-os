@@ -16,6 +16,7 @@ type OsWindowProps = {
     active: boolean;
     onFocus: (key: WindowKey) => void;
     onMinimize: (key: WindowKey) => void;
+    onClose: (key: WindowKey) => void;
     onMaximize: (key: WindowKey) => void;
     onMove: (key: WindowKey, x: number, y: number) => void;
     onResize: (key: WindowKey, rect: WindowRect) => void;
@@ -43,6 +44,7 @@ export function OsWindow({
     active,
     onFocus,
     onMinimize,
+    onClose,
     onMaximize,
     onMove,
     onResize,
@@ -56,7 +58,7 @@ export function OsWindow({
         rect: WindowRect;
     } | null>(null);
 
-    if (windowState.minimized) {
+    if (windowState.closed || windowState.minimized) {
         return null;
     }
 
@@ -213,7 +215,11 @@ export function OsWindow({
                 onPointerCancel={endDrag}
             >
                 <span>{windowState.title}</span>
-                <div className="window-actions">
+                <div
+                    className="window-actions"
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                >
                     <button
                         type="button"
                         aria-label={`Minimize ${windowState.title}`}
@@ -231,7 +237,7 @@ export function OsWindow({
                     <button
                         type="button"
                         aria-label={`Close ${windowState.title}`}
-                        onClick={() => onMinimize(windowState.key)}
+                        onClick={() => onClose(windowState.key)}
                     >
                         <X size={17} />
                     </button>
