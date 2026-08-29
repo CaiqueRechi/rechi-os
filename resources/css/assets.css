@@ -1,0 +1,43 @@
+:root {
+    --asset-color-background: #1d161f;
+    --asset-color-surface: #241b27;
+    --asset-color-surface-strong: #17111a;
+    --asset-color-purple: #533d64;
+    --asset-color-purple-light: #6d4c83;
+    --asset-color-purple-deep: #402352;
+    --asset-color-orange: #db633a;
+    --asset-color-gold: #d4a047;
+    --asset-color-cream: #ffeca5;
+    --asset-color-soft-cream: #fffbea;
+    --asset-color-green: #8ee35f;
+    --asset-color-border: rgb(255 251 234 / 0.14);
+    --asset-color-muted: rgb(255 251 234 / 0.64);
+    --asset-background-grid:
+        linear-gradient(
+            transparent 0,
+            rgb(255 236 165 / 0.04) 1px,
+            transparent 2px
+        ),
+        linear-gradient(
+            90deg,
+            transparent 0,
+            rgb(255 236 165 / 0.035) 1px,
+            transparent 2px
+        );
+    --asset-background-glow: radial-gradient(
+        circle at 62% 96%,
+        rgb(219 99 58 / 0.26),
+        transparent 26%
+    );
+}
+
+.auth-surface {
+    background:
+        var(--asset-background-glow), var(--asset-background-grid),
+        var(--asset-color-background);
+    background-size:
+        auto,
+        18px 18px,
+        18px 18px,
+        auto;
+}

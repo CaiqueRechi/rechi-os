@@ -19,10 +19,12 @@ export default function AdminDashboard({
     return (
         <>
             <Head title="Admin - Rechi OS" />
-            <main className="min-h-screen bg-[#1D161F] p-8 font-mono text-[#FFFBEA]">
+            <main className="min-h-screen bg-background p-8 font-mono text-foreground">
                 <header className="mb-8">
-                    <p className="text-[#8ee35f]">&gt; admin unlocked</p>
-                    <h1 className="text-4xl font-black text-[#FFECA5]">
+                    <p className="text-[var(--asset-color-green)]">
+                        &gt; admin unlocked
+                    </p>
+                    <h1 className="text-4xl font-black text-[var(--asset-color-cream)]">
                         RECHI OS CONTROL
                     </h1>
                 </header>
@@ -30,25 +32,27 @@ export default function AdminDashboard({
                     {Object.entries(stats).map(([label, value]) => (
                         <article
                             key={label}
-                            className="rounded-lg border border-[#FFFBEA22] bg-[#0e0d14] p-5"
+                            className="rounded-lg border border-border bg-card p-5"
                         >
-                            <p className="text-[#D4A047] uppercase">{label}</p>
-                            <strong className="mt-2 block text-3xl text-[#DB633A]">
+                            <p className="text-accent uppercase">{label}</p>
+                            <strong className="mt-2 block text-3xl text-primary">
                                 {value}
                             </strong>
                         </article>
                     ))}
                 </section>
-                <section className="mt-8 rounded-lg border border-[#FFFBEA22] bg-[#0e0d14] p-5">
-                    <h2 className="mb-4 text-xl text-[#FFECA5]">Messages</h2>
+                <section className="mt-8 rounded-lg border border-border bg-card p-5">
+                    <h2 className="mb-4 text-xl text-[var(--asset-color-cream)]">
+                        Messages
+                    </h2>
                     <div className="grid gap-3">
                         {messages.map((message) => (
                             <article
                                 key={message.id}
-                                className="rounded-md border border-[#FFFBEA18] p-4"
+                                className="rounded-md border border-border p-4"
                             >
                                 <strong>{message.subject}</strong>
-                                <p className="text-sm text-[#FFFBEA99]">
+                                <p className="text-sm text-muted-foreground">
                                     {message.name} - {message.email} -{' '}
                                     {message.status}
                                 </p>

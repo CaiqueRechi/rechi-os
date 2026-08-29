@@ -2,6 +2,8 @@
 
 @import 'tw-animate-css';
 
+@import './assets.css';
+
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
@@ -62,74 +64,43 @@
 }
 
 :root {
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --background: var(--asset-color-background);
+    --foreground: var(--asset-color-soft-cream);
+    --card: var(--asset-color-surface);
+    --card-foreground: var(--asset-color-soft-cream);
+    --popover: var(--asset-color-surface-strong);
+    --popover-foreground: var(--asset-color-soft-cream);
+    --primary: var(--asset-color-orange);
+    --primary-foreground: var(--asset-color-soft-cream);
+    --secondary: var(--asset-color-purple);
+    --secondary-foreground: var(--asset-color-soft-cream);
+    --muted: var(--asset-color-surface);
+    --muted-foreground: var(--asset-color-muted);
+    --accent: var(--asset-color-gold);
+    --accent-foreground: var(--asset-color-background);
     --destructive: oklch(0.577 0.245 27.325);
     --destructive-foreground: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.87 0 0);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
+    --border: var(--asset-color-border);
+    --input: var(--asset-color-border);
+    --ring: var(--asset-color-gold);
+    --chart-1: var(--asset-color-orange);
+    --chart-2: var(--asset-color-purple);
+    --chart-3: var(--asset-color-gold);
+    --chart-4: var(--asset-color-cream);
+    --chart-5: var(--asset-color-green);
     --radius: 0.625rem;
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.87 0 0);
+    --sidebar: var(--asset-color-surface-strong);
+    --sidebar-foreground: var(--asset-color-soft-cream);
+    --sidebar-primary: var(--asset-color-orange);
+    --sidebar-primary-foreground: var(--asset-color-soft-cream);
+    --sidebar-accent: var(--asset-color-purple);
+    --sidebar-accent-foreground: var(--asset-color-soft-cream);
+    --sidebar-border: var(--asset-color-border);
+    --sidebar-ring: var(--asset-color-gold);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.145 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.145 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.985 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.396 0.141 25.723);
-    --destructive-foreground: oklch(0.637 0.237 25.331);
-    --border: oklch(0.269 0 0);
-    --input: oklch(0.269 0 0);
-    --ring: oklch(0.439 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.985 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(0.269 0 0);
-    --sidebar-ring: oklch(0.439 0 0);
+    color-scheme: dark;
 }
 
 @layer base {
@@ -144,32 +115,17 @@
 
 @layer components {
     .rechi-os {
-        --os-bg: #1d161f;
-        --os-purple: #533d64;
-        --os-orange: #db633a;
-        --os-gold: #d4a047;
-        --os-cream: #ffeca5;
-        --os-soft: #fffbea;
-        --os-green: #8ee35f;
+        --os-bg: var(--asset-color-background);
+        --os-purple: var(--asset-color-purple);
+        --os-orange: var(--asset-color-orange);
+        --os-gold: var(--asset-color-gold);
+        --os-cream: var(--asset-color-cream);
+        --os-soft: var(--asset-color-soft-cream);
+        --os-green: var(--asset-color-green);
         min-height: 100vh;
         overflow: hidden;
         background:
-            radial-gradient(
-                circle at 62% 96%,
-                rgb(219 99 58 / 0.26),
-                transparent 26%
-            ),
-            linear-gradient(
-                transparent 0,
-                rgb(255 236 165 / 0.04) 1px,
-                transparent 2px
-            ),
-            linear-gradient(
-                90deg,
-                transparent 0,
-                rgb(255 236 165 / 0.035) 1px,
-                transparent 2px
-            ),
+            var(--asset-background-glow), var(--asset-background-grid),
             var(--os-bg);
         background-size:
             auto,
@@ -188,7 +144,8 @@
         width: 100%;
         align-items: center;
         justify-content: space-between;
-        border-bottom: 1px solid rgb(255 251 234 / 0.12);
+        border-bottom: 1px solid
+            color-mix(in srgb, var(--os-soft) 12%, transparent);
         background: rgb(13 10 17 / 0.84);
         padding: 0 28px;
         color: var(--os-cream);
@@ -202,7 +159,8 @@
     }
 
     .clock {
-        border-left: 1px solid rgb(255 251 234 / 0.18);
+        border-left: 1px solid
+            color-mix(in srgb, var(--os-soft) 18%, transparent);
         padding-left: 24px;
     }
 
@@ -217,7 +175,8 @@
         flex-direction: column;
         align-items: center;
         gap: 28px;
-        border-right: 1px solid rgb(255 251 234 / 0.12);
+        border-right: 1px solid
+            color-mix(in srgb, var(--os-soft) 12%, transparent);
         background: linear-gradient(
             180deg,
             rgb(36 25 47 / 0.82),
@@ -240,13 +199,15 @@
 
     .dock button svg {
         color: var(--os-orange);
-        filter: drop-shadow(0 0 8px rgb(219 99 58 / 0.4));
+        filter: drop-shadow(
+            0 0 8px color-mix(in srgb, var(--os-orange) 40%, transparent)
+        );
     }
 
     .dock button.active,
     .dock button:focus-visible,
     .dock button:hover {
-        border-color: rgb(255 236 165 / 0.22);
+        border-color: color-mix(in srgb, var(--os-cream) 22%, transparent);
         background: rgb(83 61 100 / 0.26);
         outline: none;
     }
@@ -266,7 +227,7 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        border: 1px solid rgb(255 251 234 / 0.16);
+        border: 1px solid color-mix(in srgb, var(--os-soft) 16%, transparent);
         border-radius: 8px;
         background: rgb(14 13 20 / 0.94);
         box-shadow:
@@ -285,7 +246,11 @@
         touch-action: none;
         align-items: center;
         justify-content: space-between;
-        background: linear-gradient(180deg, #614173, #352042);
+        background: linear-gradient(
+            180deg,
+            var(--asset-color-purple-light),
+            var(--asset-color-purple-deep)
+        );
         padding: 0 18px;
         color: var(--os-cream);
         text-transform: uppercase;
@@ -426,7 +391,7 @@
     .location,
     .summary {
         margin-top: 16px;
-        color: rgb(255 251 234 / 0.74);
+        color: color-mix(in srgb, var(--os-soft) 74%, transparent);
     }
 
     .location,
@@ -467,9 +432,9 @@
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        border: 1px solid rgb(219 99 58 / 0.35);
+        border: 1px solid color-mix(in srgb, var(--os-orange) 35%, transparent);
         border-radius: 6px;
-        background: rgb(219 99 58 / 0.14);
+        background: color-mix(in srgb, var(--os-orange) 14%, transparent);
         padding: 10px 14px;
         color: var(--os-cream);
     }
@@ -489,7 +454,7 @@
         display: grid;
         grid-template-columns: 66px 1fr;
         gap: 14px;
-        border: 1px solid rgb(255 251 234 / 0.12);
+        border: 1px solid color-mix(in srgb, var(--os-soft) 12%, transparent);
         border-radius: 8px;
         padding: 14px;
         text-align: left;
@@ -497,8 +462,8 @@
 
     .project-list button.selected,
     .project-list button:hover {
-        border-color: rgb(219 99 58 / 0.45);
-        background: rgb(219 99 58 / 0.08);
+        border-color: color-mix(in srgb, var(--os-orange) 45%, transparent);
+        background: color-mix(in srgb, var(--os-orange) 8%, transparent);
     }
 
     .project-icon {
@@ -506,7 +471,11 @@
         aspect-ratio: 1;
         place-items: center;
         border-radius: 7px;
-        background: linear-gradient(135deg, #6d4c83, #402352);
+        background: linear-gradient(
+            135deg,
+            var(--asset-color-purple-light),
+            var(--asset-color-purple-deep)
+        );
         color: var(--os-cream);
     }
 
