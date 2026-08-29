@@ -23,7 +23,7 @@ class SecurityHeaders
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
         $response->headers->set(
             'Content-Security-Policy',
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            $this->contentSecurityPolicy(),
         );
 
         if (app()->isProduction()) {
@@ -31,5 +31,13 @@ class SecurityHeaders
         }
 
         return $response;
+    }
+
+    private function contentSecurityPolicy(): string
+    {
+        $viteHttpSource = app()->isLocal() ? ' http://127.0.0.1:5173' : '';
+        $viteWebSocketSource = app()->isLocal() ? ' ws://127.0.0.1:5173' : '';
+
+        return "default-src 'self'; script-src 'self' 'unsafe-inline'{$viteHttpSource}; style-src 'self' 'unsafe-inline'{$viteHttpSource}; img-src 'self' data:{$viteHttpSource}; connect-src 'self'{$viteHttpSource}{$viteWebSocketSource}; font-src 'self' data:{$viteHttpSource}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
     }
 }
