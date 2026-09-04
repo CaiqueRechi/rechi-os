@@ -264,22 +264,7 @@ export class SalemScene implements SalemSceneHandle {
         rim.receiveShadow = true;
         group.add(rim);
 
-        const underside = new THREE.Mesh(
-            new THREE.ConeGeometry(
-                island.radius * 0.9,
-                island.height * 2.4,
-                18,
-            ),
-            new THREE.MeshStandardMaterial({
-                color: island.soilColor,
-                roughness: 0.95,
-                flatShading: true,
-            }),
-        );
-        underside.position.y = -island.height * 0.85;
-        underside.scale.copy(islandScale ?? new THREE.Vector3(1, 1, 1));
-        underside.castShadow = true;
-        group.add(underside);
+        this.addFloatingRockBase(group, island, islandScale);
 
         this.addGrassDetails(group, island, islandScale);
 
@@ -296,6 +281,89 @@ export class SalemScene implements SalemSceneHandle {
         });
 
         return group;
+    }
+
+    private addFloatingRockBase(
+        group: THREE.Group,
+        island: IslandConfig,
+        islandScale: THREE.Vector3 | null,
+    ): void {
+        const scale = islandScale ?? new THREE.Vector3(1, 1, 1);
+        const rockMaterial = new THREE.MeshStandardMaterial({
+            color: island.soilColor,
+            roughness: 0.96,
+            flatShading: true,
+        });
+        const darkRockMaterial = new THREE.MeshStandardMaterial({
+            color: '#3f3d46',
+            roughness: 0.98,
+            flatShading: true,
+        });
+
+        const upperRock = new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                island.radius * 0.94,
+                island.radius * 0.76,
+                island.height * 0.72,
+                20,
+            ),
+            rockMaterial,
+        );
+        upperRock.position.y = island.height * 0.03;
+        upperRock.scale.set(scale.x, 1, scale.z);
+        upperRock.castShadow = true;
+        upperRock.receiveShadow = true;
+        group.add(upperRock);
+
+        const lowerRock = new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                island.radius * 0.58,
+                island.radius * 0.4,
+                island.height * 0.46,
+                16,
+            ),
+            darkRockMaterial,
+        );
+        lowerRock.position.y = -island.height * 0.52;
+        lowerRock.scale.set(scale.x * 0.92, 1, scale.z * 0.9);
+        lowerRock.rotation.y = 0.28;
+        lowerRock.castShadow = true;
+        group.add(lowerRock);
+
+        const glowRing = new THREE.Mesh(
+            new THREE.TorusGeometry(island.radius * 0.66, 0.018, 6, 40),
+            new THREE.MeshBasicMaterial({
+                color: '#9de7ff',
+                transparent: true,
+                opacity: island.id === 'home' ? 0.28 : 0.18,
+            }),
+        );
+        glowRing.position.y = -island.height * 0.82;
+        glowRing.rotation.x = Math.PI * 0.5;
+        glowRing.scale.set(scale.x * 0.8, scale.z * 0.8, 1);
+        group.add(glowRing);
+
+        for (let index = 0; index < 10; index += 1) {
+            const angle = index * 1.71;
+            const distance = island.radius * (0.34 + (index % 4) * 0.12);
+            const shard = new THREE.Mesh(
+                new THREE.DodecahedronGeometry(0.16 + (index % 3) * 0.05, 0),
+                index % 3 === 0 ? darkRockMaterial : rockMaterial,
+            );
+            shard.position.set(
+                Math.cos(angle) * distance * scale.x,
+                -island.height * (0.26 + (index % 4) * 0.15),
+                Math.sin(angle) * distance * scale.z,
+            );
+            shard.rotation.set(index * 0.23, index * 0.37, index * 0.14);
+            shard.scale.set(
+                1.1 + (index % 2) * 0.28,
+                0.42 + (index % 3) * 0.12,
+                0.82 + (index % 2) * 0.18,
+            );
+            shard.castShadow = true;
+            group.add(shard);
+        }
     }
 
     private addGrassDetails(
