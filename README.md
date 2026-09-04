@@ -2,6 +2,12 @@
 
 Portfolio pessoal de Caique Rechi em formato de sistema operacional: janelas, dock, terminal seguro, projetos como apps e area administrativa protegida.
 
+## Salem Floating Isles v1
+
+Registro da primeira versao visual do mini-game `/salem`.
+
+![Salem Floating Isles v1](docs/salem-v1.png)
+
 ## Stack
 
 - Laravel 13, PHP 8.3+, React, TypeScript, Inertia, Tailwind CSS e Vite.
