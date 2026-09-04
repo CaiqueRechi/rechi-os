@@ -64,6 +64,7 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api-public', fn (Request $request) => Limit::perMinute(60)->by((string) $request->ip()));
         RateLimiter::for('contact', fn (Request $request) => Limit::perMinute(3)->by((string) $request->ip()));
         RateLimiter::for('assistant', fn (Request $request) => Limit::perMinute(10)->by((string) $request->ip().'|'.$request->session()->getId()));
+        RateLimiter::for('salem-actions', fn (Request $request) => Limit::perMinute(30)->by((string) $request->ip().'|'.$request->session()->getId()));
 
         Gate::define('managePortfolio', fn ($user): bool => (bool) $user->is_admin);
     }
