@@ -12,19 +12,19 @@ type SalemHudProps = {
 
 export function SalemHud({ action, save, weather, error }: SalemHudProps) {
     return (
-        <div className="pointer-events-none absolute top-4 left-4 z-10 grid gap-2 text-white drop-shadow-[0_2px_10px_rgba(26,32,44,0.35)] sm:top-6 sm:left-6">
-            <div className="rounded-lg border border-white/20 bg-slate-950/35 px-4 py-3 shadow-2xl shadow-slate-950/20 backdrop-blur-md">
-                <p className="text-xs tracking-[0.22em] text-cyan-100/80 uppercase">
+        <div className="pointer-events-none absolute top-4 left-4 z-10 grid gap-2 text-white drop-shadow-[0_2px_10px_rgba(26,32,44,0.35)] sm:top-5 sm:left-5">
+            <div className="rounded-md border border-white/18 bg-[#172033]/42 px-4 py-3 shadow-2xl shadow-slate-950/18 backdrop-blur-md">
+                <p className="text-[0.68rem] font-semibold tracking-[0.2em] text-amber-100/80 uppercase">
                     Salem Floating Isles
                 </p>
-                <div className="mt-2 flex flex-wrap items-end gap-4">
-                    <p className="text-2xl font-semibold">
+                <div className="mt-1.5 flex flex-wrap items-end gap-3">
+                    <p className="text-xl font-semibold">
                         {salemActionLabels[action]}
                     </p>
-                    <p className="text-sm text-cyan-50/90">
+                    <p className="text-xs font-medium text-cyan-50/90">
                         {save.cozy_points} Cozy Points
                     </p>
-                    <p className="text-sm text-cyan-50/90">
+                    <p className="text-xs font-medium text-cyan-50/90">
                         Level {save.level}
                     </p>
                 </div>

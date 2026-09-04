@@ -17,7 +17,7 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
     const sceneRef = useRef<SalemSceneHandle | null>(null);
     const [save, setSave] = useState(initialSave);
     const [action, setAction] = useState<SalemAction>('idle');
-    const [weather, setWeather] = useState<SalemWeather>('clear');
+    const [weather, setWeather] = useState<SalemWeather>('sunset');
     const [error, setError] = useState<string | null>(null);
 
     const submitAction = useCallback(
@@ -62,14 +62,14 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
     return (
         <>
             <Head title="Salem Floating Isles" />
-            <main className="relative h-dvh min-h-[34rem] overflow-hidden bg-sky-900">
+            <main className="relative h-dvh min-h-[34rem] overflow-hidden bg-[#6d8faf]">
                 <SalemGameCanvas
                     ref={sceneRef}
                     weather={weather}
                     onActionChange={setAction}
                     onAssetError={setError}
                 />
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-slate-950/45 to-transparent" />
+                <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(18,27,46,0)_32%,rgba(15,23,42,0.34))]" />
                 <SalemHud
                     action={action}
                     error={error}

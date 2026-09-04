@@ -32,6 +32,8 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly root = new THREE.Group();
 
+    private readonly atmosphere = new THREE.Group();
+
     private readonly clock = new THREE.Clock();
 
     private readonly camera: THREE.OrthographicCamera;
@@ -174,22 +176,36 @@ export class SalemScene implements SalemSceneHandle {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        this.renderer.toneMappingExposure = 1.05;
         this.renderer.domElement.className = 'block size-full';
         this.container.appendChild(this.renderer.domElement);
     }
 
     private createWorld(): void {
         this.root.rotation.y = this.rootRotation;
+        this.root.position.y = -0.15;
+        this.atmosphere.position.y = -0.1;
+        this.scene.add(this.atmosphere);
         this.scene.add(this.root);
 
-        this.hemisphere = new THREE.HemisphereLight('#dff8ff', '#7c8f68', 2);
+        this.hemisphere = new THREE.HemisphereLight('#eafaff', '#7f8c66', 2.2);
         this.scene.add(this.hemisphere);
 
-        this.sunlight = new THREE.DirectionalLight('#fff0b8', 2.35);
-        this.sunlight.position.set(-4, 9, 6);
+        this.sunlight = new THREE.DirectionalLight('#fff3c4', 2.55);
+        this.sunlight.position.set(-5, 9, 7);
         this.sunlight.castShadow = true;
-        this.sunlight.shadow.mapSize.set(1024, 1024);
+        this.sunlight.shadow.mapSize.set(2048, 2048);
+        this.sunlight.shadow.camera.left = -9;
+        this.sunlight.shadow.camera.right = 9;
+        this.sunlight.shadow.camera.top = 8;
+        this.sunlight.shadow.camera.bottom = -8;
         this.scene.add(this.sunlight);
+
+        const fillLight = new THREE.DirectionalLight('#87d5ff', 0.75);
+        fillLight.position.set(6, 3, -5);
+        this.scene.add(fillLight);
 
         this.laptopGlow = new THREE.PointLight('#7dd3fc', 0.55, 5);
         this.laptopGlow.position.set(...programmingSpot.laptop);
@@ -209,29 +225,50 @@ export class SalemScene implements SalemSceneHandle {
         const group = new THREE.Group();
         group.position.set(...island.position);
 
+        const islandScale =
+            island.id === 'home' ? new THREE.Vector3(1.16, 1, 0.82) : null;
+
         const grass = new THREE.Mesh(
             new THREE.CylinderGeometry(
                 island.radius,
-                island.radius * 0.9,
-                0.34,
-                11,
+                island.radius * 0.94,
+                0.3,
+                24,
             ),
             new THREE.MeshStandardMaterial({
                 color: island.color,
-                roughness: 0.78,
-                flatShading: true,
+                roughness: 0.72,
             }),
         );
         grass.position.y = island.height * 0.5;
+        grass.scale.copy(islandScale ?? new THREE.Vector3(1, 1, 1));
         grass.castShadow = true;
         grass.receiveShadow = true;
         group.add(grass);
 
+        const rim = new THREE.Mesh(
+            new THREE.CylinderGeometry(
+                island.radius * 1.01,
+                island.radius * 0.98,
+                0.12,
+                24,
+            ),
+            new THREE.MeshStandardMaterial({
+                color: '#325f48',
+                roughness: 0.82,
+            }),
+        );
+        rim.position.y = island.height * 0.34;
+        rim.scale.copy(islandScale ?? new THREE.Vector3(1, 1, 1));
+        rim.castShadow = true;
+        rim.receiveShadow = true;
+        group.add(rim);
+
         const underside = new THREE.Mesh(
             new THREE.ConeGeometry(
-                island.radius * 0.92,
+                island.radius * 0.9,
                 island.height * 2.4,
-                10,
+                18,
             ),
             new THREE.MeshStandardMaterial({
                 color: island.soilColor,
@@ -240,8 +277,11 @@ export class SalemScene implements SalemSceneHandle {
             }),
         );
         underside.position.y = -island.height * 0.85;
+        underside.scale.copy(islandScale ?? new THREE.Vector3(1, 1, 1));
         underside.castShadow = true;
         group.add(underside);
+
+        this.addGrassDetails(group, island, islandScale);
 
         this.addIslandProps(group, island);
 
@@ -256,6 +296,42 @@ export class SalemScene implements SalemSceneHandle {
         });
 
         return group;
+    }
+
+    private addGrassDetails(
+        group: THREE.Group,
+        island: IslandConfig,
+        islandScale: THREE.Vector3 | null,
+    ): void {
+        const highlight = new THREE.Mesh(
+            new THREE.CircleGeometry(island.radius * 0.72, 32),
+            new THREE.MeshBasicMaterial({
+                color: island.biome === 'autumn' ? '#f2a45d' : '#a7df72',
+                transparent: true,
+                opacity: island.id === 'home' ? 0.22 : 0.16,
+            }),
+        );
+        highlight.rotation.x = -Math.PI * 0.5;
+        highlight.position.set(-0.35, island.height * 0.5 + 0.156, -0.22);
+        highlight.scale.copy(islandScale ?? new THREE.Vector3(1, 1, 1));
+        group.add(highlight);
+
+        const path = new THREE.Mesh(
+            new THREE.CircleGeometry(island.radius * 0.36, 24),
+            new THREE.MeshBasicMaterial({
+                color: island.biome === 'rocky' ? '#a5aea8' : '#e2bf8f',
+                transparent: true,
+                opacity: island.id === 'home' ? 0.26 : 0.12,
+            }),
+        );
+        path.rotation.x = -Math.PI * 0.5;
+        path.scale.set(
+            islandScale ? islandScale.x * 1.15 : 1.15,
+            islandScale ? islandScale.z * 0.58 : 0.58,
+            1,
+        );
+        path.position.set(0.75, island.height * 0.5 + 0.158, 0.88);
+        group.add(path);
     }
 
     private addIslandProps(group: THREE.Group, island: IslandConfig): void {
@@ -304,7 +380,7 @@ export class SalemScene implements SalemSceneHandle {
         const body = new THREE.Mesh(
             new THREE.BoxGeometry(1.35, 1.05, 1.1),
             new THREE.MeshStandardMaterial({
-                color: '#c98e55',
+                color: '#b77948',
                 roughness: 0.8,
             }),
         );
@@ -315,7 +391,7 @@ export class SalemScene implements SalemSceneHandle {
         const roof = new THREE.Mesh(
             new THREE.ConeGeometry(1.08, 0.72, 4),
             new THREE.MeshStandardMaterial({
-                color: '#6f4b67',
+                color: '#563b46',
                 roughness: 0.72,
                 flatShading: true,
             }),
@@ -334,6 +410,19 @@ export class SalemScene implements SalemSceneHandle {
         );
         door.position.set(0, -0.2, 0.57);
         group.add(door);
+
+        const windowMaterial = new THREE.MeshStandardMaterial({
+            color: '#ffe7a3',
+            emissive: '#ffb84a',
+            emissiveIntensity: 0.9,
+            roughness: 0.35,
+        });
+        const window = new THREE.Mesh(
+            new THREE.BoxGeometry(0.24, 0.24, 0.045),
+            windowMaterial,
+        );
+        window.position.set(0.42, 0.1, 0.57);
+        group.add(window);
 
         return group;
     }
@@ -426,11 +515,11 @@ export class SalemScene implements SalemSceneHandle {
 
     private addTrees(group: THREE.Group, biome: IslandBiome): void {
         const leafColors: Record<IslandBiome, string[]> = {
-            home: ['#4f9b52', '#6fbd61'],
-            meadow: ['#4ea957', '#80c45e'],
-            rocky: ['#6f8277', '#8b9a89'],
-            tropical: ['#2f9a73', '#50c78e'],
-            autumn: ['#c85f3f', '#d99b42'],
+            home: ['#2f7d54', '#68a85a'],
+            meadow: ['#3f9a55', '#88c95f'],
+            rocky: ['#718078', '#a1aa91'],
+            tropical: ['#1d9073', '#54c28b'],
+            autumn: ['#b95d45', '#d8a44e'],
         };
         const positions = [
             [-2.15, 0.9, -0.1],
@@ -465,6 +554,18 @@ export class SalemScene implements SalemSceneHandle {
             leaves.position.y = 1.18;
             leaves.castShadow = true;
             tree.add(leaves);
+
+            const lowerLeaves = new THREE.Mesh(
+                new THREE.ConeGeometry(0.58, 0.82, 7),
+                new THREE.MeshStandardMaterial({
+                    color: leafColors[biome][(index + 1) % 2],
+                    roughness: 0.86,
+                    flatShading: true,
+                }),
+            );
+            lowerLeaves.position.y = 0.86;
+            lowerLeaves.castShadow = true;
+            tree.add(lowerLeaves);
             group.add(tree);
         });
     }
@@ -483,9 +584,10 @@ export class SalemScene implements SalemSceneHandle {
             );
             flower.position.set(
                 Math.cos(angle) * distance,
-                0.72,
+                0.73,
                 Math.sin(angle) * distance,
             );
+            flower.castShadow = true;
             group.add(flower);
         }
     }
@@ -516,9 +618,11 @@ export class SalemScene implements SalemSceneHandle {
         const pool = new THREE.Mesh(
             new THREE.CylinderGeometry(0.62, 0.62, 0.035, 20),
             new THREE.MeshStandardMaterial({
-                color: '#43c8d9',
+                color: '#35bdd3',
+                emissive: '#0ea5b7',
+                emissiveIntensity: 0.12,
                 transparent: true,
-                opacity: 0.82,
+                opacity: 0.86,
                 roughness: 0.18,
             }),
         );
@@ -554,7 +658,9 @@ export class SalemScene implements SalemSceneHandle {
         );
         glow.position.y = 0.5;
         group.add(glow);
-        group.add(new THREE.PointLight('#ffca7a', 0.55, 3));
+        const light = new THREE.PointLight('#ffca7a', 0.85, 4.2);
+        light.position.y = 0.5;
+        group.add(light);
 
         return group;
     }
@@ -619,20 +725,20 @@ export class SalemScene implements SalemSceneHandle {
 
     private createDecorativeFragments(): void {
         const fragmentMaterial = new THREE.MeshStandardMaterial({
-            color: '#6b665f',
+            color: '#4d4d55',
             roughness: 0.95,
             flatShading: true,
         });
 
-        for (let index = 0; index < 18; index += 1) {
+        for (let index = 0; index < 12; index += 1) {
             const fragment = new THREE.Mesh(
-                new THREE.DodecahedronGeometry(0.12 + (index % 4) * 0.05, 0),
+                new THREE.DodecahedronGeometry(0.08 + (index % 4) * 0.04, 0),
                 fragmentMaterial,
             );
             fragment.position.set(
-                Math.sin(index * 1.9) * 7.6,
-                -1.8 - (index % 5) * 0.45,
-                Math.cos(index * 1.31) * 5.2,
+                Math.sin(index * 1.9) * 6.8,
+                -2.1 - (index % 5) * 0.36,
+                Math.cos(index * 1.31) * 4.8,
             );
             fragment.rotation.set(index * 0.17, index * 0.31, index * 0.11);
             this.root.add(fragment);
@@ -643,21 +749,23 @@ export class SalemScene implements SalemSceneHandle {
         const cloudMaterial = new THREE.MeshBasicMaterial({
             color: '#eff8fb',
             transparent: true,
-            opacity: 0.48,
+            opacity: 0.24,
+            depthWrite: false,
         });
 
-        for (let index = 0; index < 12; index += 1) {
+        for (let index = 0; index < 10; index += 1) {
             const cloud = new THREE.Mesh(
                 new THREE.SphereGeometry(0.58 + (index % 3) * 0.18, 10, 7),
                 cloudMaterial,
             );
+            const side = index % 2 === 0 ? -1 : 1;
             cloud.position.set(
-                Math.sin(index * 1.44) * 8.2,
-                0.25 - (index % 4) * 0.5,
-                Math.cos(index * 1.08) * 5.9,
+                side * (3.4 + (index % 4) * 1.25),
+                -0.15 - (index % 4) * 0.56,
+                Math.cos(index * 1.08) * 5.2,
             );
-            cloud.scale.set(1.8, 0.36, 0.72);
-            this.root.add(cloud);
+            cloud.scale.set(2.2, 0.28, 0.62);
+            this.atmosphere.add(cloud);
         }
     }
 
@@ -687,15 +795,15 @@ export class SalemScene implements SalemSceneHandle {
 
         for (let index = 0; index < count; index += 1) {
             matrix.makeTranslation(
-                Math.sin(index * 12.93) * 8,
-                4 - (index % 18) * 0.34,
-                Math.cos(index * 8.21) * 6,
+                Math.sin(index * 12.93) * 6.8,
+                3.7 - (index % 18) * 0.32,
+                Math.cos(index * 8.21) * 5.2,
             );
             particles.setMatrixAt(index, matrix);
         }
 
         this.weatherParticles.push(particles);
-        this.root.add(particles);
+        this.atmosphere.add(particles);
     }
 
     private createSalemFallback(): void {
@@ -813,14 +921,14 @@ export class SalemScene implements SalemSceneHandle {
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
         const aspect = width / Math.max(height, 1);
-        const frustum = width < 720 ? 9.6 : 8.2;
+        const frustum = width < 720 ? 7.5 : 6.65;
 
         this.camera.left = (-frustum * aspect) / 2;
         this.camera.right = (frustum * aspect) / 2;
         this.camera.top = frustum / 2;
         this.camera.bottom = -frustum / 2;
-        this.camera.position.set(6.8, 5.6, 8.2);
-        this.camera.lookAt(0, -0.15, 0);
+        this.camera.position.set(5.7, 4.7, 7);
+        this.camera.lookAt(0.1, 0.34, 0.18);
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(width, height, false);
     };
@@ -916,9 +1024,9 @@ export class SalemScene implements SalemSceneHandle {
             for (let index = 0; index < particles.count; index += 1) {
                 const y = 4 - ((elapsed * 0.45 + index * 0.23) % 6.2);
                 matrix.makeTranslation(
-                    Math.sin(index * 12.93 + elapsed * 0.08) * 8,
+                    Math.sin(index * 12.93 + elapsed * 0.08) * 6.8,
                     y,
-                    Math.cos(index * 8.21) * 6,
+                    Math.cos(index * 8.21) * 5.2,
                 );
                 particles.setMatrixAt(index, matrix);
             }
