@@ -51,7 +51,7 @@ jobs:
           sed -i "s#__DIR__.'/../bootstrap/app.php'#__DIR__.'/bootstrap/app.php'#" .deploy-public/index.php
 
       - name: Deploy PHP dependencies by FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
@@ -61,7 +61,7 @@ jobs:
           state-name: .ftp-deploy-vendor-state.json
 
       - name: Deploy application by FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
@@ -91,7 +91,7 @@ jobs:
             storage/framework/views/**
 
       - name: Deploy public document root by FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
