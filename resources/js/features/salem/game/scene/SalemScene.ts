@@ -149,7 +149,6 @@ export class SalemScene implements SalemSceneHandle {
         this.configureRenderer();
         this.createWorld();
         this.createSalemFallback();
-        this.loadSalemAsset();
         this.attachEvents();
         this.setWeather('clear');
         this.resize();
@@ -1411,8 +1410,8 @@ export class SalemScene implements SalemSceneHandle {
                 this.assetLoader.configureShadows(model);
                 this.assetLoader.applyMaterialTheme('salem', model);
 
+                this.fallbackSalem.visible = false;
                 this.catAnchor.add(model);
-                this.catAnchor.add(this.createSalemFaceAccent());
                 this.catAnchor.add(this.programmingPaws);
 
                 this.salemMixer = new THREE.AnimationMixer(model);
@@ -1429,22 +1428,6 @@ export class SalemScene implements SalemSceneHandle {
                     'Salem model could not load, using fallback cat.',
                 );
             });
-    }
-
-    private createSalemFaceAccent(): THREE.Group {
-        const group = new THREE.Group();
-        const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#9ff6cf' });
-
-        for (const z of [-0.11, 0.11]) {
-            const eye = new THREE.Mesh(
-                new THREE.SphereGeometry(0.028, 8, 6),
-                eyeMaterial,
-            );
-            eye.position.set(0.48, 0.9, z);
-            group.add(eye);
-        }
-
-        return group;
     }
 
     private createProgrammingPaws(): void {
