@@ -28,7 +28,7 @@ export const weatherPresets: Record<SalemWeather, WeatherPreset> = {
         sunlight: '#fff0b8',
         sunlightIntensity: 2.45,
         particleColor: '#ffffff',
-        particleCount: 18,
+        particleCount: 12,
     },
     misty: {
         id: 'misty',
@@ -42,7 +42,7 @@ export const weatherPresets: Record<SalemWeather, WeatherPreset> = {
         sunlight: '#d9edf2',
         sunlightIntensity: 1.4,
         particleColor: '#dbe7ee',
-        particleCount: 42,
+        particleCount: 28,
     },
     rain: {
         id: 'rain',
@@ -56,7 +56,7 @@ export const weatherPresets: Record<SalemWeather, WeatherPreset> = {
         sunlight: '#b9d7da',
         sunlightIntensity: 1.25,
         particleColor: '#bfeeff',
-        particleCount: 80,
+        particleCount: 44,
     },
     sunset: {
         id: 'sunset',
@@ -70,7 +70,7 @@ export const weatherPresets: Record<SalemWeather, WeatherPreset> = {
         sunlight: '#ffd38a',
         sunlightIntensity: 2.35,
         particleColor: '#fff0bd',
-        particleCount: 26,
+        particleCount: 18,
     },
     night: {
         id: 'night',
@@ -84,6 +84,6 @@ export const weatherPresets: Record<SalemWeather, WeatherPreset> = {
         sunlight: '#b7c8ff',
         sunlightIntensity: 0.95,
         particleColor: '#f6e6c0',
-        particleCount: 38,
+        particleCount: 24,
     },
 };

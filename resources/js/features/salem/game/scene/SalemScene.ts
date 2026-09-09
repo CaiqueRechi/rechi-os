@@ -6,12 +6,10 @@ import { weatherPresets } from '../../environment/weather';
 import { actionDuration, sequenceStepAt } from '../../state/salem-actions';
 import { salemHome, islandConfigs, programmingSpot } from '../../world/islands';
 import type {
-    IslandAssetPlacement,
     IslandAssetRole,
     IslandBiome,
     IslandConfig,
 } from '../../world/islands';
-import { SalemAssetLoader } from '../assets/SalemAssetLoader';
 
 type SalemSceneOptions = {
     onActionChange: (action: SalemAction) => void;
@@ -64,8 +62,6 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly atmosphere = new THREE.Group();
 
-    private readonly clock = new THREE.Clock();
-
     private readonly raycaster = new THREE.Raycaster();
 
     private readonly pointer = new THREE.Vector2();
@@ -73,8 +69,6 @@ export class SalemScene implements SalemSceneHandle {
     private readonly camera: THREE.OrthographicCamera;
 
     private readonly renderer: THREE.WebGLRenderer;
-
-    private readonly assetLoader = new SalemAssetLoader();
 
     private readonly waterFalls: Waterfall[] = [];
 
@@ -99,15 +93,21 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly options: SalemSceneOptions;
 
-    private readonly salemActions = new Map<string, THREE.AnimationAction>();
+    private salemBody?: THREE.Object3D;
+
+    private salemHead?: THREE.Object3D;
+
+    private salemTail?: THREE.Object3D;
+
+    private readonly salemEyes: THREE.Object3D[] = [];
 
     private animationFrame: number | null = null;
 
-    private salemMixer?: THREE.AnimationMixer;
+    private lastRenderAt = 0;
 
-    private activeSalemAnimation?: THREE.AnimationAction;
+    private lastTickAt = performance.now();
 
-    private activeSalemAnimationName?: string;
+    private elapsedSeconds = 0;
 
     private sunlight?: THREE.DirectionalLight;
 
@@ -223,12 +223,12 @@ export class SalemScene implements SalemSceneHandle {
     }
 
     private configureRenderer(): void {
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.9));
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.45));
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFShadowMap;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.12;
+        this.renderer.toneMappingExposure = 1.06;
         this.renderer.domElement.className = 'block size-full';
         this.renderer.domElement.style.cursor = 'grab';
         this.container.appendChild(this.renderer.domElement);
@@ -247,11 +247,11 @@ export class SalemScene implements SalemSceneHandle {
         this.sunlight = new THREE.DirectionalLight('#fff2c8', 2.7);
         this.sunlight.position.set(-5, 9, 7);
         this.sunlight.castShadow = true;
-        this.sunlight.shadow.mapSize.set(2048, 2048);
-        this.sunlight.shadow.camera.left = -9;
-        this.sunlight.shadow.camera.right = 9;
-        this.sunlight.shadow.camera.top = 8;
-        this.sunlight.shadow.camera.bottom = -8;
+        this.sunlight.shadow.mapSize.set(1024, 1024);
+        this.sunlight.shadow.camera.left = -7;
+        this.sunlight.shadow.camera.right = 7;
+        this.sunlight.shadow.camera.top = 6;
+        this.sunlight.shadow.camera.bottom = -6;
         this.scene.add(this.sunlight);
 
         const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.82);
@@ -292,7 +292,7 @@ export class SalemScene implements SalemSceneHandle {
                 island.radius,
                 island.radius * 0.94,
                 0.3,
-                24,
+                18,
             ),
             new THREE.MeshStandardMaterial({
                 color: island.color,
@@ -315,7 +315,7 @@ export class SalemScene implements SalemSceneHandle {
                 island.radius * 1.01,
                 island.radius * 0.98,
                 0.12,
-                24,
+                18,
             ),
             new THREE.MeshStandardMaterial({
                 color: '#325f48',
@@ -372,7 +372,7 @@ export class SalemScene implements SalemSceneHandle {
                 island.radius * 0.94,
                 island.radius * 0.76,
                 island.height * 0.72,
-                20,
+                16,
             ),
             rockMaterial,
         );
@@ -387,7 +387,7 @@ export class SalemScene implements SalemSceneHandle {
                 island.radius * 0.58,
                 island.radius * 0.4,
                 island.height * 0.46,
-                16,
+                12,
             ),
             darkRockMaterial,
         );
@@ -410,7 +410,9 @@ export class SalemScene implements SalemSceneHandle {
         glowRing.scale.set(scale.x * 0.8, scale.z * 0.8, 1);
         group.add(glowRing);
 
-        for (let index = 0; index < 10; index += 1) {
+        const shardCount = island.id === 'home' ? 8 : 5;
+
+        for (let index = 0; index < shardCount; index += 1) {
             const angle = index * 1.71;
             const distance = island.radius * (0.34 + (index % 4) * 0.12);
             const shard = new THREE.Mesh(
@@ -439,7 +441,7 @@ export class SalemScene implements SalemSceneHandle {
         islandScale: THREE.Vector3 | null,
     ): void {
         const highlight = new THREE.Mesh(
-            new THREE.CircleGeometry(island.radius * 0.72, 32),
+            new THREE.CircleGeometry(island.radius * 0.72, 24),
             new THREE.MeshBasicMaterial({
                 color: this.highlightColorForBiome(island.biome),
                 transparent: true,
@@ -452,7 +454,7 @@ export class SalemScene implements SalemSceneHandle {
         group.add(highlight);
 
         const path = new THREE.Mesh(
-            new THREE.CircleGeometry(island.radius * 0.36, 24),
+            new THREE.CircleGeometry(island.radius * 0.36, 18),
             new THREE.MeshBasicMaterial({
                 color: this.pathColorForBiome(island.biome),
                 transparent: true,
@@ -789,64 +791,13 @@ export class SalemScene implements SalemSceneHandle {
 
     private addAssetRole(
         group: THREE.Group,
-        island: IslandConfig,
-        role: IslandAssetRole,
+        _island: IslandConfig,
+        _role: IslandAssetRole,
         fallback?: THREE.Group,
     ): void {
-        const placements = island.assetPlacements?.filter(
-            (placement) => placement.role === role,
-        );
-
-        if (!placements?.length) {
-            if (fallback) {
-                group.add(fallback);
-            }
-
-            return;
-        }
-
         if (fallback) {
             group.add(fallback);
         }
-
-        void this.loadAssetPlacements(placements).then((assets) => {
-            if (assets.length === 0) {
-                return;
-            }
-
-            if (fallback) {
-                group.remove(fallback);
-                this.disposeObject(fallback);
-            }
-
-            assets.forEach((asset) => group.add(asset));
-        });
-    }
-
-    private async loadAssetPlacements(
-        placements: IslandAssetPlacement[],
-    ): Promise<THREE.Group[]> {
-        const loaded = await Promise.allSettled(
-            placements.map((placement) =>
-                this.assetLoader.createStaticInstance(placement.asset, {
-                    position: placement.position,
-                    rotation: placement.rotation,
-                    scale: placement.scale,
-                }),
-            ),
-        );
-
-        const assets = loaded.flatMap((result) =>
-            result.status === 'fulfilled' ? [result.value] : [],
-        );
-
-        if (assets.length !== placements.length) {
-            this.options.onAssetError(
-                'Some Salem scenery models could not load, using fallbacks.',
-            );
-        }
-
-        return assets;
     }
 
     private disposeObject(object: THREE.Object3D): void {
@@ -871,41 +822,65 @@ export class SalemScene implements SalemSceneHandle {
 
     private createCabin(): THREE.Group {
         const group = new THREE.Group();
-        group.position.set(-0.85, 0.96, -0.85);
-        group.rotation.y = -0.35;
+        group.position.set(-0.95, 0.86, -0.92);
+        group.rotation.y = -0.42;
+
+        const wallMaterial = new THREE.MeshStandardMaterial({
+            color: '#9f663d',
+            roughness: 0.86,
+            flatShading: true,
+        });
+        const trimMaterial = new THREE.MeshStandardMaterial({
+            color: '#5a382b',
+            roughness: 0.84,
+            flatShading: true,
+        });
 
         const body = new THREE.Mesh(
-            new THREE.BoxGeometry(1.35, 1.05, 1.1),
-            new THREE.MeshStandardMaterial({
-                color: '#b77948',
-                roughness: 0.8,
-            }),
+            new THREE.BoxGeometry(1.1, 0.78, 0.92),
+            wallMaterial,
         );
         body.castShadow = true;
         body.receiveShadow = true;
         group.add(body);
 
-        const roof = new THREE.Mesh(
-            new THREE.ConeGeometry(1.08, 0.72, 4),
+        const sideShade = new THREE.Mesh(
+            new THREE.BoxGeometry(0.03, 0.76, 0.88),
             new THREE.MeshStandardMaterial({
-                color: '#563b46',
+                color: '#7c472f',
+                roughness: 0.88,
+                flatShading: true,
+            }),
+        );
+        sideShade.position.set(0.56, -0.01, -0.01);
+        group.add(sideShade);
+
+        const roof = new THREE.Mesh(
+            new THREE.ConeGeometry(0.86, 0.5, 4),
+            new THREE.MeshStandardMaterial({
+                color: '#57303b',
                 roughness: 0.72,
                 flatShading: true,
             }),
         );
-        roof.position.y = 0.82;
+        roof.position.y = 0.62;
         roof.rotation.y = Math.PI * 0.25;
         roof.castShadow = true;
         group.add(roof);
 
-        const door = new THREE.Mesh(
-            new THREE.BoxGeometry(0.34, 0.58, 0.04),
-            new THREE.MeshStandardMaterial({
-                color: '#4f332a',
-                roughness: 0.6,
-            }),
+        const porch = new THREE.Mesh(
+            new THREE.BoxGeometry(0.56, 0.07, 0.28),
+            trimMaterial,
         );
-        door.position.set(0, -0.2, 0.57);
+        porch.position.set(0, -0.43, 0.58);
+        porch.castShadow = true;
+        group.add(porch);
+
+        const door = new THREE.Mesh(
+            new THREE.BoxGeometry(0.28, 0.48, 0.04),
+            trimMaterial,
+        );
+        door.position.set(-0.1, -0.16, 0.48);
         group.add(door);
 
         const windowMaterial = new THREE.MeshStandardMaterial({
@@ -915,10 +890,10 @@ export class SalemScene implements SalemSceneHandle {
             roughness: 0.35,
         });
         const window = new THREE.Mesh(
-            new THREE.BoxGeometry(0.24, 0.24, 0.045),
+            new THREE.BoxGeometry(0.2, 0.2, 0.045),
             windowMaterial,
         );
-        window.position.set(0.42, 0.1, 0.57);
+        window.position.set(0.28, 0.04, 0.48);
         group.add(window);
 
         return group;
@@ -926,35 +901,42 @@ export class SalemScene implements SalemSceneHandle {
 
     private createChair(): THREE.Group {
         const group = new THREE.Group();
-        group.position.set(1.9, 0.82, 1.18);
+        group.position.set(1.72, 0.81, 1.34);
         group.rotation.y = -0.72;
 
         const wood = new THREE.MeshStandardMaterial({
-            color: '#7b563f',
-            roughness: 0.7,
+            color: '#79513a',
+            roughness: 0.78,
+            flatShading: true,
+        });
+        const cushion = new THREE.MeshStandardMaterial({
+            color: '#263446',
+            roughness: 0.64,
+            flatShading: true,
         });
         const seat = new THREE.Mesh(
-            new THREE.BoxGeometry(0.58, 0.12, 0.52),
-            wood,
+            new THREE.BoxGeometry(0.5, 0.1, 0.46),
+            cushion,
         );
         seat.castShadow = true;
         group.add(seat);
 
         const back = new THREE.Mesh(
-            new THREE.BoxGeometry(0.58, 0.68, 0.1),
+            new THREE.BoxGeometry(0.5, 0.5, 0.08),
             wood,
         );
-        back.position.set(0, 0.33, -0.25);
+        back.position.set(0, 0.26, -0.22);
+        back.rotation.x = -0.12;
         back.castShadow = true;
         group.add(back);
 
         for (const x of [-0.22, 0.22]) {
             for (const z of [-0.2, 0.2]) {
                 const leg = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.08, 0.48, 0.08),
+                    new THREE.BoxGeometry(0.055, 0.34, 0.055),
                     wood,
                 );
-                leg.position.set(x, -0.28, z);
+                leg.position.set(x * 0.86, -0.22, z * 0.82);
                 leg.castShadow = true;
                 group.add(leg);
             }
@@ -969,12 +951,13 @@ export class SalemScene implements SalemSceneHandle {
         group.rotation.set(-0.08, -0.72, 0);
 
         const shell = new THREE.MeshStandardMaterial({
-            color: '#263446',
+            color: '#172033',
             metalness: 0.2,
             roughness: 0.45,
+            flatShading: true,
         });
         const base = new THREE.Mesh(
-            new THREE.BoxGeometry(0.62, 0.06, 0.42),
+            new THREE.BoxGeometry(0.56, 0.055, 0.38),
             shell,
         );
         this.registerInteraction(base, {
@@ -985,17 +968,17 @@ export class SalemScene implements SalemSceneHandle {
         group.add(base);
 
         this.laptopScreen = new THREE.MeshStandardMaterial({
-            color: '#10233d',
-            emissive: '#38bdf8',
-            emissiveIntensity: 0.6,
+            color: '#101827',
+            emissive: '#37d5ff',
+            emissiveIntensity: 0.72,
             roughness: 0.35,
         });
 
         const screen = new THREE.Mesh(
-            new THREE.BoxGeometry(0.62, 0.42, 0.05),
+            new THREE.BoxGeometry(0.56, 0.38, 0.045),
             this.laptopScreen,
         );
-        screen.position.set(0, 0.24, -0.18);
+        screen.position.set(0, 0.22, -0.16);
         screen.rotation.x = -0.34;
         this.registerInteraction(screen, {
             action: 'program',
@@ -1008,10 +991,10 @@ export class SalemScene implements SalemSceneHandle {
 
         for (let index = 0; index < 5; index += 1) {
             const line = new THREE.Mesh(
-                new THREE.BoxGeometry(0.34 - index * 0.035, 0.014, 0.012),
+                new THREE.BoxGeometry(0.28 - index * 0.026, 0.012, 0.01),
                 lineMaterial.clone(),
             );
-            line.position.set(-0.05, 0.2 + index * 0.045, -0.214);
+            line.position.set(-0.04, 0.18 + index * 0.04, -0.194);
             line.rotation.x = -0.34;
             this.laptopCodeLines.push(line);
             group.add(line);
@@ -1347,87 +1330,92 @@ export class SalemScene implements SalemSceneHandle {
     }
 
     private createSalemFallback(): void {
-        const material = new THREE.MeshStandardMaterial({
-            color: '#1f2027',
+        this.fallbackSalem.scale.setScalar(1.12);
+
+        const fur = new THREE.MeshStandardMaterial({
+            color: '#171920',
             roughness: 0.62,
+            flatShading: true,
+        });
+        const belly = new THREE.MeshStandardMaterial({
+            color: '#252a34',
+            roughness: 0.68,
+            flatShading: true,
         });
         const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
-        const body = new THREE.Mesh(
-            new THREE.SphereGeometry(0.32, 14, 10),
-            material,
-        );
-        body.scale.set(1.2, 0.72, 0.72);
-        body.position.y = 0.12;
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), fur);
+        body.scale.set(1.26, 0.72, 0.78);
+        body.position.y = 0.14;
         body.castShadow = true;
+        this.salemBody = body;
         this.fallbackSalem.add(body);
 
-        const head = new THREE.Mesh(
-            new THREE.SphereGeometry(0.2, 12, 8),
-            material,
+        const chest = new THREE.Mesh(
+            new THREE.SphereGeometry(0.18, 10, 7),
+            belly,
         );
-        head.position.set(0.32, 0.23, 0);
-        head.castShadow = true;
-        this.fallbackSalem.add(head);
+        chest.scale.set(0.6, 0.3, 0.8);
+        chest.position.set(0.2, 0.11, 0);
+        this.fallbackSalem.add(chest);
 
-        for (const z of [-0.09, 0.09]) {
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0.33, 0.29, 0);
+        this.salemHead = headGroup;
+        this.fallbackSalem.add(headGroup);
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), fur);
+        head.castShadow = true;
+        headGroup.add(head);
+
+        for (const z of [-0.085, 0.085]) {
             const eye = new THREE.Mesh(
-                new THREE.SphereGeometry(0.025, 8, 6),
+                new THREE.SphereGeometry(0.032, 8, 6),
                 eyeMaterial,
             );
-            eye.position.set(0.48, 0.27, z);
-            this.fallbackSalem.add(eye);
+            eye.position.set(0.17, 0.035, z);
+            this.salemEyes.push(eye);
+            headGroup.add(eye);
         }
 
         for (const z of [-0.11, 0.11]) {
             const ear = new THREE.Mesh(
-                new THREE.ConeGeometry(0.075, 0.18, 3),
-                material,
+                new THREE.ConeGeometry(0.085, 0.2, 3),
+                fur,
             );
-            ear.position.set(0.27, 0.43, z);
-            ear.rotation.z = -0.18;
-            this.fallbackSalem.add(ear);
+            ear.position.set(-0.01, 0.21, z);
+            ear.rotation.set(0, 0.18, z > 0 ? -0.22 : 0.22);
+            headGroup.add(ear);
         }
 
-        const tail = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.04, 0.035, 0.62, 6),
-            material,
-        );
-        tail.position.set(-0.42, 0.22, 0);
-        tail.rotation.z = 1.05;
-        tail.castShadow = true;
-        this.fallbackSalem.add(tail);
+        for (const z of [-0.16, 0.16]) {
+            const paw = new THREE.Mesh(
+                new THREE.SphereGeometry(0.07, 8, 5),
+                fur,
+            );
+            paw.scale.set(1.25, 0.5, 0.7);
+            paw.position.set(0.22, -0.12, z);
+            paw.castShadow = true;
+            this.fallbackSalem.add(paw);
+        }
+
+        const tailGroup = new THREE.Group();
+        tailGroup.position.set(-0.42, 0.21, 0);
+        tailGroup.rotation.z = 1.05;
+        this.salemTail = tailGroup;
+        this.fallbackSalem.add(tailGroup);
+
+        for (let index = 0; index < 3; index += 1) {
+            const segment = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.038, 0.042, 0.24, 6),
+                fur,
+            );
+            segment.position.y = index * 0.16;
+            segment.rotation.z = -0.18 + index * 0.1;
+            segment.castShadow = true;
+            tailGroup.add(segment);
+        }
+
         this.catAnchor.add(this.fallbackSalem);
-    }
-
-    private loadSalemAsset(): void {
-        void this.assetLoader
-            .load('salem')
-            .then((gltf) => {
-                const model = gltf.scene;
-                model.position.y = 0.5;
-                model.scale.setScalar(0.0055);
-                model.rotation.y = Math.PI * 0.5;
-                this.assetLoader.configureShadows(model);
-                this.assetLoader.applyMaterialTheme('salem', model);
-
-                this.fallbackSalem.visible = false;
-                this.catAnchor.add(model);
-                this.catAnchor.add(this.programmingPaws);
-
-                this.salemMixer = new THREE.AnimationMixer(model);
-                gltf.animations.forEach((clip) => {
-                    this.salemActions.set(
-                        clip.name,
-                        this.salemMixer!.clipAction(clip),
-                    );
-                });
-                this.playSalemAnimation('Idle');
-            })
-            .catch(() => {
-                this.options.onAssetError(
-                    'Salem model could not load, using fallback cat.',
-                );
-            });
     }
 
     private createProgrammingPaws(): void {
@@ -1642,13 +1630,24 @@ export class SalemScene implements SalemSceneHandle {
     };
 
     private animate = (): void => {
-        const delta = this.clock.getDelta();
-        const elapsed = this.clock.elapsedTime;
+        const now = performance.now();
+
+        if (now - this.lastRenderAt < 1000 / 45) {
+            this.animationFrame = requestAnimationFrame(this.animate);
+
+            return;
+        }
+
+        this.lastRenderAt = now;
+        const delta = Math.min((now - this.lastTickAt) / 1000, 0.05);
+        this.lastTickAt = now;
+        this.elapsedSeconds += delta;
+        const elapsed = this.elapsedSeconds;
 
         if (!document.hidden) {
             this.updateRoot(delta);
             this.updateFloatingIslands(elapsed);
-            this.updateAnimatedFeatures(elapsed);
+            this.updateAnimatedFeatures(elapsed, delta);
             this.updateWaterfalls(elapsed);
             this.updateWeatherParticles(elapsed);
             this.updateSalem(delta, elapsed);
@@ -1676,12 +1675,12 @@ export class SalemScene implements SalemSceneHandle {
         });
     }
 
-    private updateAnimatedFeatures(elapsed: number): void {
+    private updateAnimatedFeatures(elapsed: number, delta: number): void {
         this.animatedFeatures.forEach((feature) => {
             feature.object.position.y =
                 feature.baseY +
                 Math.sin(elapsed * 1.8 + feature.phase) * feature.bob;
-            feature.object.rotation.y += feature.spin * 0.016;
+            feature.object.rotation.y += feature.spin * delta;
         });
     }
 
@@ -1753,8 +1752,7 @@ export class SalemScene implements SalemSceneHandle {
             7,
             delta,
         );
-        this.updateSalemAnimation(this.currentAction, step.phase);
-        this.salemMixer?.update(delta);
+        this.updateSalemRig(this.currentAction, step.phase, elapsed, delta);
         this.programmingPaws.visible =
             this.currentAction === 'program' && step.phase === 'acting';
         this.updateLaptop(elapsed);
@@ -1846,59 +1844,80 @@ export class SalemScene implements SalemSceneHandle {
         elapsed: number,
     ): number {
         if (action === 'sleep') {
-            return 0.56;
+            return 0.82;
         }
 
         if (action === 'sit' || (action === 'program' && phase !== 'moving')) {
-            return 0.72;
+            return 0.92;
         }
 
         return 1 + Math.sin(elapsed * 2.8) * 0.025;
     }
 
-    private updateSalemAnimation(action: SalemAction, phase: string): void {
-        if (phase === 'moving' || action === 'walk') {
-            this.playSalemAnimation('Walk');
+    private updateSalemRig(
+        action: SalemAction,
+        phase: string,
+        elapsed: number,
+        delta: number,
+    ): void {
+        const moving = phase === 'moving' || action === 'walk';
+        const programming = action === 'program' && phase === 'acting';
+        const sleeping = action === 'sleep' && phase !== 'moving';
+        const pulse = Math.sin(elapsed * (moving ? 10 : 2.4));
 
-            return;
+        if (this.salemBody) {
+            this.salemBody.position.y = THREE.MathUtils.damp(
+                this.salemBody.position.y,
+                0.14 + (moving ? Math.abs(pulse) * 0.035 : 0),
+                9,
+                delta,
+            );
+            this.salemBody.rotation.z = THREE.MathUtils.damp(
+                this.salemBody.rotation.z,
+                sleeping ? 0.5 : moving ? pulse * 0.055 : 0,
+                8,
+                delta,
+            );
         }
 
-        if (action === 'inspect') {
-            this.playSalemAnimation('Yes');
-
-            return;
+        if (this.salemHead) {
+            this.salemHead.rotation.y = THREE.MathUtils.damp(
+                this.salemHead.rotation.y,
+                programming ? -0.28 : moving ? pulse * 0.05 : 0.08,
+                7,
+                delta,
+            );
+            this.salemHead.rotation.z = THREE.MathUtils.damp(
+                this.salemHead.rotation.z,
+                sleeping
+                    ? 0.48
+                    : programming
+                      ? -0.12
+                      : Math.sin(elapsed) * 0.04,
+                7,
+                delta,
+            );
         }
 
-        this.playSalemAnimation('Idle');
-    }
-
-    private playSalemAnimation(name: string): void {
-        const animationName = this.resolveSalemAnimationName(name);
-
-        if (!animationName || animationName === this.activeSalemAnimationName) {
-            return;
+        if (this.salemTail) {
+            this.salemTail.rotation.z = THREE.MathUtils.damp(
+                this.salemTail.rotation.z,
+                sleeping ? 0.45 : 1.05 + Math.sin(elapsed * 3.2) * 0.22,
+                6,
+                delta,
+            );
+            this.salemTail.rotation.y = THREE.MathUtils.damp(
+                this.salemTail.rotation.y,
+                moving ? Math.sin(elapsed * 7.5) * 0.24 : 0,
+                8,
+                delta,
+            );
         }
 
-        const nextAction = this.salemActions.get(animationName);
-
-        if (!nextAction) {
-            return;
-        }
-
-        nextAction.reset().fadeIn(0.2).play();
-        this.activeSalemAnimation?.fadeOut(0.2);
-        this.activeSalemAnimation = nextAction;
-        this.activeSalemAnimationName = animationName;
-    }
-
-    private resolveSalemAnimationName(name: string): string | undefined {
-        if (this.salemActions.has(name)) {
-            return name;
-        }
-
-        return [...this.salemActions.keys()].find((animationName) =>
-            animationName.endsWith(`|${name}`),
-        );
+        const blink = Math.sin(elapsed * 1.7) > 0.985 ? 0.08 : 1;
+        this.salemEyes.forEach((eye) => {
+            eye.scale.y = THREE.MathUtils.damp(eye.scale.y, blink, 20, delta);
+        });
     }
 
     private updateLaptop(elapsed: number): void {
