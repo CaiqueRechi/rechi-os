@@ -2,7 +2,6 @@ import { Head } from '@inertiajs/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { recordSalemAction } from '@/features/salem/api/salem-api';
-import { SalemDevControls } from '@/features/salem/components/SalemDevControls';
 import { SalemGameCanvas } from '@/features/salem/components/SalemGameCanvas';
 import { SalemHud } from '@/features/salem/components/SalemHud';
 import type { SalemSceneHandle } from '@/features/salem/game/scene/SalemScene';
@@ -25,11 +24,7 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
             try {
                 const response = await recordSalemAction(nextAction);
                 setSave(response.save);
-                setError(
-                    response.accepted
-                        ? null
-                        : 'That action is still cooling down.',
-                );
+                setError(null);
             } catch {
                 setError(
                     'Progress could not be saved. The world is still playable.',
@@ -39,9 +34,8 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
         [],
     );
 
-    const forceAction = useCallback(
+    const requestAction = useCallback(
         (nextAction: SalemAction) => {
-            sceneRef.current?.forceAction(nextAction);
             setAction(nextAction);
             void submitAction(nextAction);
         },
@@ -67,7 +61,9 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
                     ref={sceneRef}
                     weather={weather}
                     onActionChange={setAction}
+                    onActionRequest={requestAction}
                     onAssetError={setError}
+                    onWeatherChange={setWeather}
                 />
                 <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(18,27,46,0)_32%,rgba(15,23,42,0.34))]" />
                 <SalemHud
@@ -75,13 +71,6 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
                     error={error}
                     save={save}
                     weather={weather}
-                />
-                <SalemDevControls
-                    weather={weather}
-                    onAction={forceAction}
-                    onAddCurrency={() => void submitAction('dev_cozy_points')}
-                    onReset={() => sceneRef.current?.resetPosition()}
-                    onWeatherChange={setWeather}
                 />
             </main>
         </>

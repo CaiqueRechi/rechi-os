@@ -14,13 +14,18 @@ import type { SalemSceneHandle } from '../game/scene/SalemScene';
 type SalemGameCanvasProps = {
     weather: SalemWeather;
     onActionChange: (action: SalemAction) => void;
+    onActionRequest: (action: SalemAction) => void;
     onAssetError: (message: string) => void;
+    onWeatherChange: (weather: SalemWeather) => void;
 };
 
 export const SalemGameCanvas = forwardRef<
     SalemSceneHandle,
     SalemGameCanvasProps
->(function SalemGameCanvas({ weather, onActionChange, onAssetError }, ref) {
+>(function SalemGameCanvas(
+    { weather, onActionChange, onActionRequest, onAssetError, onWeatherChange },
+    ref,
+) {
     const containerRef = useRef<HTMLDivElement>(null);
     const sceneRef = useRef<SalemSceneHandle | null>(null);
     const [webGlUnavailable, setWebGlUnavailable] = useState(false);
@@ -29,6 +34,7 @@ export const SalemGameCanvas = forwardRef<
         return {
             dispose: () => sceneRef.current?.dispose(),
             forceAction: (action) => sceneRef.current?.forceAction(action),
+            moveTo: (target) => sceneRef.current?.moveTo(target),
             resetPosition: () => sceneRef.current?.resetPosition(),
             setWeather: (nextWeather) =>
                 sceneRef.current?.setWeather(nextWeather),
@@ -50,7 +56,9 @@ export const SalemGameCanvas = forwardRef<
 
         const scene = new SalemScene(container, {
             onActionChange,
+            onActionRequest,
             onAssetError,
+            onWeatherChange,
         });
         sceneRef.current = scene;
 
@@ -58,7 +66,7 @@ export const SalemGameCanvas = forwardRef<
             scene.dispose();
             sceneRef.current = null;
         };
-    }, [onActionChange, onAssetError]);
+    }, [onActionChange, onActionRequest, onAssetError, onWeatherChange]);
 
     useEffect(() => {
         sceneRef.current?.setWeather(weather);

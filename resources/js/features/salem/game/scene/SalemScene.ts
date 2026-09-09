@@ -15,7 +15,9 @@ import { SalemAssetLoader } from '../assets/SalemAssetLoader';
 
 type SalemSceneOptions = {
     onActionChange: (action: SalemAction) => void;
+    onActionRequest: (action: SalemAction) => void;
     onAssetError: (message: string) => void;
+    onWeatherChange: (weather: SalemWeather) => void;
 };
 
 type Waterfall = {
@@ -25,8 +27,31 @@ type Waterfall = {
     height: number;
 };
 
+type InteractionTarget = {
+    action: SalemAction;
+    target?: THREE.Vector3;
+    weather?: SalemWeather;
+};
+
+type FloatingIsland = {
+    group: THREE.Group;
+    baseY: number;
+    phase: number;
+    speed: number;
+    amplitude: number;
+};
+
+type AnimatedFeature = {
+    object: THREE.Object3D;
+    baseY: number;
+    phase: number;
+    spin: number;
+    bob: number;
+};
+
 export type SalemSceneHandle = {
     forceAction: (action: SalemAction) => void;
+    moveTo: (target: [number, number, number]) => void;
     resetPosition: () => void;
     setWeather: (weather: SalemWeather) => void;
     dispose: () => void;
@@ -41,6 +66,10 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly clock = new THREE.Clock();
 
+    private readonly raycaster = new THREE.Raycaster();
+
+    private readonly pointer = new THREE.Vector2();
+
     private readonly camera: THREE.OrthographicCamera;
 
     private readonly renderer: THREE.WebGLRenderer;
@@ -53,7 +82,18 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly laptopCodeLines: THREE.Mesh[] = [];
 
+    private readonly interactionTargets = new Map<
+        THREE.Object3D,
+        InteractionTarget
+    >();
+
+    private readonly floatingIslands: FloatingIsland[] = [];
+
+    private readonly animatedFeatures: AnimatedFeature[] = [];
+
     private readonly programmingPaws = new THREE.Group();
+
+    private readonly fallbackSalem = new THREE.Group();
 
     private readonly catAnchor = new THREE.Group();
 
@@ -83,7 +123,16 @@ export class SalemScene implements SalemSceneHandle {
 
     private rootRotation = -0.28;
 
-    private pointerStart: { x: number; rotation: number } | null = null;
+    private manualMoveTarget?: THREE.Vector3;
+
+    private desiredFacing = -0.55;
+
+    private pointerStart: {
+        x: number;
+        y: number;
+        rotation: number;
+        dragging: boolean;
+    } | null = null;
 
     public constructor(
         private readonly container: HTMLElement,
@@ -108,9 +157,14 @@ export class SalemScene implements SalemSceneHandle {
     }
 
     public forceAction(action: SalemAction): void {
+        this.manualMoveTarget = undefined;
         this.currentAction = action;
         this.actionStartedAt = performance.now();
         this.options.onActionChange(action);
+    }
+
+    public moveTo(target: [number, number, number]): void {
+        this.moveSalemTo(new THREE.Vector3(...target));
     }
 
     public resetPosition(): void {
@@ -177,6 +231,7 @@ export class SalemScene implements SalemSceneHandle {
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.12;
         this.renderer.domElement.className = 'block size-full';
+        this.renderer.domElement.style.cursor = 'grab';
         this.container.appendChild(this.renderer.domElement);
     }
 
@@ -221,6 +276,14 @@ export class SalemScene implements SalemSceneHandle {
     private createIsland(island: IslandConfig): THREE.Group {
         const group = new THREE.Group();
         group.position.set(...island.position);
+        this.floatingIslands.push({
+            group,
+            baseY: island.position[1],
+            phase: island.position[0] * 0.47 + island.position[2] * 0.29,
+            speed: island.id === 'home' ? 0.24 : 0.18 + island.radius * 0.025,
+            amplitude:
+                island.id === 'home' ? 0.025 : 0.035 + island.radius * 0.006,
+        });
 
         const islandScale =
             island.id === 'home' ? new THREE.Vector3(1.16, 1, 0.82) : null;
@@ -242,6 +305,10 @@ export class SalemScene implements SalemSceneHandle {
         grass.scale.copy(islandScale ?? new THREE.Vector3(1, 1, 1));
         grass.castShadow = true;
         grass.receiveShadow = true;
+        this.registerInteraction(grass, {
+            action: 'walk',
+            weather: island.weatherHint,
+        });
         group.add(grass);
 
         const rim = new THREE.Mesh(
@@ -268,6 +335,8 @@ export class SalemScene implements SalemSceneHandle {
         this.addGrassDetails(group, island, islandScale);
 
         this.addIslandProps(group, island);
+
+        this.addBiomeFeatures(group, island);
 
         island.waterfalls?.forEach((waterfall) => {
             const createdWaterfall = this.createWaterfall(
@@ -373,7 +442,7 @@ export class SalemScene implements SalemSceneHandle {
         const highlight = new THREE.Mesh(
             new THREE.CircleGeometry(island.radius * 0.72, 32),
             new THREE.MeshBasicMaterial({
-                color: island.biome === 'autumn' ? '#f2a45d' : '#a7df72',
+                color: this.highlightColorForBiome(island.biome),
                 transparent: true,
                 opacity: island.id === 'home' ? 0.22 : 0.16,
             }),
@@ -386,7 +455,7 @@ export class SalemScene implements SalemSceneHandle {
         const path = new THREE.Mesh(
             new THREE.CircleGeometry(island.radius * 0.36, 24),
             new THREE.MeshBasicMaterial({
-                color: island.biome === 'rocky' ? '#a5aea8' : '#e2bf8f',
+                color: this.pathColorForBiome(island.biome),
                 transparent: true,
                 opacity: island.id === 'home' ? 0.26 : 0.12,
             }),
@@ -399,6 +468,44 @@ export class SalemScene implements SalemSceneHandle {
         );
         path.position.set(0.75, island.height * 0.5 + 0.158, 0.88);
         group.add(path);
+    }
+
+    private highlightColorForBiome(biome: IslandBiome): string {
+        const colors: Record<IslandBiome, string> = {
+            autumn: '#f2a45d',
+            crystal: '#a5fff1',
+            desert: '#f0bd61',
+            home: '#a7df72',
+            lavender: '#c9a2ff',
+            lunar: '#cdd2e8',
+            mangrove: '#69c690',
+            meadow: '#a7df72',
+            nebula: '#ff9df3',
+            rocky: '#bec5b8',
+            tropical: '#70e0ad',
+            tundra: '#dcf8ff',
+        };
+
+        return colors[biome];
+    }
+
+    private pathColorForBiome(biome: IslandBiome): string {
+        const colors: Record<IslandBiome, string> = {
+            autumn: '#d68b4e',
+            crystal: '#d4f8ff',
+            desert: '#e5b45f',
+            home: '#e2bf8f',
+            lavender: '#ddc1ff',
+            lunar: '#a5aab8',
+            mangrove: '#5a8566',
+            meadow: '#e2bf8f',
+            nebula: '#9a88ff',
+            rocky: '#a5aea8',
+            tropical: '#76c9b0',
+            tundra: '#e3f4ef',
+        };
+
+        return colors[biome];
     }
 
     private addIslandProps(group: THREE.Group, island: IslandConfig): void {
@@ -454,6 +561,231 @@ export class SalemScene implements SalemSceneHandle {
         }
 
         this.addAssetRole(group, island, 'decor');
+    }
+
+    private addBiomeFeatures(group: THREE.Group, island: IslandConfig): void {
+        if (island.biome === 'crystal') {
+            group.add(
+                this.createCrystalCluster([
+                    [-0.35, 0.52, -0.35],
+                    [0.15, 0.52, 0.15],
+                    [0.48, 0.52, -0.25],
+                ]),
+            );
+        }
+
+        if (island.biome === 'lunar') {
+            group.add(this.createLunarRing(island.radius));
+        }
+
+        if (island.biome === 'nebula') {
+            group.add(this.createNebulaBeacon(island.radius));
+        }
+
+        if (island.biome === 'desert') {
+            group.add(this.createDuneNeedles());
+        }
+
+        if (island.biome === 'mangrove') {
+            group.add(this.createMangroveRoots());
+        }
+
+        if (island.biome === 'lavender') {
+            group.add(this.createLavenderWisps(island.radius));
+        }
+
+        if (island.biome === 'tundra') {
+            group.add(this.createFrostCrystals());
+        }
+    }
+
+    private createCrystalCluster(
+        positions: [number, number, number][],
+    ): THREE.Group {
+        const group = new THREE.Group();
+        const colors = ['#8ff8ff', '#bda7ff', '#70f0ca'];
+
+        positions.forEach((position, index) => {
+            const crystal = new THREE.Mesh(
+                new THREE.ConeGeometry(0.13 + index * 0.035, 0.72, 5),
+                new THREE.MeshStandardMaterial({
+                    color: colors[index % colors.length],
+                    emissive: colors[index % colors.length],
+                    emissiveIntensity: 0.25,
+                    roughness: 0.38,
+                    flatShading: true,
+                }),
+            );
+            crystal.position.set(...position);
+            crystal.rotation.set(0.2, index * 0.8, -0.12);
+            crystal.castShadow = true;
+            group.add(crystal);
+            this.animatedFeatures.push({
+                object: crystal,
+                baseY: position[1],
+                phase: index * 0.9,
+                spin: 0.08,
+                bob: 0.035,
+            });
+        });
+
+        return group;
+    }
+
+    private createLunarRing(radius: number): THREE.Group {
+        const group = new THREE.Group();
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(radius * 0.48, 0.018, 6, 56),
+            new THREE.MeshBasicMaterial({
+                color: '#dbe7ff',
+                transparent: true,
+                opacity: 0.72,
+            }),
+        );
+        ring.position.y = 0.82;
+        ring.rotation.x = Math.PI * 0.5;
+        group.add(ring);
+        this.animatedFeatures.push({
+            object: ring,
+            baseY: ring.position.y,
+            phase: 1.4,
+            spin: 0.18,
+            bob: 0.025,
+        });
+
+        return group;
+    }
+
+    private createNebulaBeacon(radius: number): THREE.Group {
+        const group = new THREE.Group();
+        const core = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.22, 0),
+            new THREE.MeshStandardMaterial({
+                color: '#ff8ff4',
+                emissive: '#8957ff',
+                emissiveIntensity: 0.8,
+                roughness: 0.45,
+                flatShading: true,
+            }),
+        );
+        core.position.set(0.2, 0.92, -0.05);
+        group.add(core);
+
+        const orbit = new THREE.Mesh(
+            new THREE.TorusGeometry(radius * 0.34, 0.011, 5, 44),
+            new THREE.MeshBasicMaterial({
+                color: '#88f7ff',
+                transparent: true,
+                opacity: 0.58,
+            }),
+        );
+        orbit.position.copy(core.position);
+        orbit.rotation.set(1.2, 0.45, 0.3);
+        group.add(orbit);
+
+        [core, orbit].forEach((object, index) =>
+            this.animatedFeatures.push({
+                object,
+                baseY: object.position.y,
+                phase: index * 1.2,
+                spin: index === 0 ? 0.35 : -0.22,
+                bob: 0.045,
+            }),
+        );
+
+        return group;
+    }
+
+    private createDuneNeedles(): THREE.Group {
+        const group = new THREE.Group();
+        const material = new THREE.MeshStandardMaterial({
+            color: '#d9a046',
+            roughness: 0.86,
+            flatShading: true,
+        });
+
+        for (let index = 0; index < 5; index += 1) {
+            const needle = new THREE.Mesh(
+                new THREE.ConeGeometry(0.05, 0.45 + index * 0.03, 4),
+                material,
+            );
+            needle.position.set(
+                Math.sin(index * 1.8) * 0.78,
+                0.56,
+                Math.cos(index * 1.4) * 0.54,
+            );
+            needle.rotation.y = index * 0.7;
+            group.add(needle);
+        }
+
+        return group;
+    }
+
+    private createMangroveRoots(): THREE.Group {
+        const group = new THREE.Group();
+        const material = new THREE.MeshStandardMaterial({
+            color: '#65412d',
+            roughness: 0.92,
+            flatShading: true,
+        });
+
+        for (let index = 0; index < 7; index += 1) {
+            const root = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.025, 0.04, 0.72, 5),
+                material,
+            );
+            root.position.set(
+                Math.sin(index * 1.1) * 0.54,
+                0.55,
+                Math.cos(index * 1.37) * 0.62,
+            );
+            root.rotation.set(0.45, index * 0.5, 0.22);
+            root.castShadow = true;
+            group.add(root);
+        }
+
+        return group;
+    }
+
+    private createLavenderWisps(radius: number): THREE.Group {
+        const group = new THREE.Group();
+        const material = new THREE.MeshBasicMaterial({
+            color: '#c9a2ff',
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false,
+        });
+
+        for (let index = 0; index < 8; index += 1) {
+            const wisp = new THREE.Mesh(
+                new THREE.SphereGeometry(0.035, 8, 6),
+                material,
+            );
+            const angle = index * 1.37;
+            wisp.position.set(
+                Math.cos(angle) * radius * 0.42,
+                0.78 + (index % 3) * 0.08,
+                Math.sin(angle) * radius * 0.42,
+            );
+            group.add(wisp);
+            this.animatedFeatures.push({
+                object: wisp,
+                baseY: wisp.position.y,
+                phase: index * 0.65,
+                spin: 0,
+                bob: 0.08,
+            });
+        }
+
+        return group;
+    }
+
+    private createFrostCrystals(): THREE.Group {
+        return this.createCrystalCluster([
+            [-0.65, 0.56, 0.25],
+            [0.24, 0.56, -0.52],
+            [0.58, 0.56, 0.12],
+        ]);
     }
 
     private addAssetRole(
@@ -646,6 +978,11 @@ export class SalemScene implements SalemSceneHandle {
             new THREE.BoxGeometry(0.62, 0.06, 0.42),
             shell,
         );
+        this.registerInteraction(base, {
+            action: 'program',
+            target: new THREE.Vector3(...programmingSpot.seat),
+            weather: 'night',
+        });
         group.add(base);
 
         this.laptopScreen = new THREE.MeshStandardMaterial({
@@ -661,6 +998,11 @@ export class SalemScene implements SalemSceneHandle {
         );
         screen.position.set(0, 0.24, -0.18);
         screen.rotation.x = -0.34;
+        this.registerInteraction(screen, {
+            action: 'program',
+            target: new THREE.Vector3(...programmingSpot.seat),
+            weather: 'night',
+        });
         group.add(screen);
 
         const lineMaterial = new THREE.MeshBasicMaterial({ color: '#b8f7ff' });
@@ -676,17 +1018,40 @@ export class SalemScene implements SalemSceneHandle {
             group.add(line);
         }
 
+        const target = new THREE.Mesh(
+            new THREE.BoxGeometry(1.35, 1.05, 1.05),
+            new THREE.MeshBasicMaterial({
+                transparent: true,
+                opacity: 0,
+                depthWrite: false,
+            }),
+        );
+        target.position.set(0, 0.22, -0.02);
+        this.registerInteraction(target, {
+            action: 'program',
+            target: new THREE.Vector3(...programmingSpot.seat),
+            weather: 'night',
+        });
+        group.add(target);
+
         return group;
     }
 
     private createTrees(biome: IslandBiome): THREE.Group {
         const group = new THREE.Group();
         const leafColors: Record<IslandBiome, string[]> = {
+            autumn: ['#b95d45', '#d8a44e'],
+            crystal: ['#69e9ff', '#a78bfa'],
+            desert: ['#c08337', '#e0b45e'],
             home: ['#2f7d54', '#68a85a'],
+            lavender: ['#7e8f5a', '#a98bdd'],
+            lunar: ['#8790a3', '#c7ccd9'],
+            mangrove: ['#236b54', '#4b9b66'],
             meadow: ['#3f9a55', '#88c95f'],
+            nebula: ['#5f7cff', '#d66bf0'],
             rocky: ['#718078', '#a1aa91'],
             tropical: ['#1d9073', '#54c28b'],
-            autumn: ['#b95d45', '#d8a44e'],
+            tundra: ['#7aa294', '#d9f6ee'],
         };
         const positions = [
             [-2.15, 0.9, -0.1],
@@ -995,7 +1360,7 @@ export class SalemScene implements SalemSceneHandle {
         body.scale.set(1.2, 0.72, 0.72);
         body.position.y = 0.12;
         body.castShadow = true;
-        this.catAnchor.add(body);
+        this.fallbackSalem.add(body);
 
         const head = new THREE.Mesh(
             new THREE.SphereGeometry(0.2, 12, 8),
@@ -1003,7 +1368,7 @@ export class SalemScene implements SalemSceneHandle {
         );
         head.position.set(0.32, 0.23, 0);
         head.castShadow = true;
-        this.catAnchor.add(head);
+        this.fallbackSalem.add(head);
 
         for (const z of [-0.09, 0.09]) {
             const eye = new THREE.Mesh(
@@ -1011,7 +1376,7 @@ export class SalemScene implements SalemSceneHandle {
                 eyeMaterial,
             );
             eye.position.set(0.48, 0.27, z);
-            this.catAnchor.add(eye);
+            this.fallbackSalem.add(eye);
         }
 
         for (const z of [-0.11, 0.11]) {
@@ -1021,7 +1386,7 @@ export class SalemScene implements SalemSceneHandle {
             );
             ear.position.set(0.27, 0.43, z);
             ear.rotation.z = -0.18;
-            this.catAnchor.add(ear);
+            this.fallbackSalem.add(ear);
         }
 
         const tail = new THREE.Mesh(
@@ -1031,7 +1396,8 @@ export class SalemScene implements SalemSceneHandle {
         tail.position.set(-0.42, 0.22, 0);
         tail.rotation.z = 1.05;
         tail.castShadow = true;
-        this.catAnchor.add(tail);
+        this.fallbackSalem.add(tail);
+        this.catAnchor.add(this.fallbackSalem);
     }
 
     private loadSalemAsset(): void {
@@ -1039,12 +1405,12 @@ export class SalemScene implements SalemSceneHandle {
             .load('salem')
             .then((gltf) => {
                 const model = gltf.scene;
-                model.scale.setScalar(0.0047);
+                model.position.y = 0.5;
+                model.scale.setScalar(0.0055);
                 model.rotation.y = Math.PI * 0.5;
                 this.assetLoader.configureShadows(model);
                 this.assetLoader.applyMaterialTheme('salem', model);
 
-                this.catAnchor.clear();
                 this.catAnchor.add(model);
                 this.catAnchor.add(this.createSalemFaceAccent());
                 this.catAnchor.add(this.programmingPaws);
@@ -1069,12 +1435,12 @@ export class SalemScene implements SalemSceneHandle {
         const group = new THREE.Group();
         const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#9ff6cf' });
 
-        for (const z of [-0.085, 0.085]) {
+        for (const z of [-0.11, 0.11]) {
             const eye = new THREE.Mesh(
-                new THREE.SphereGeometry(0.022, 8, 6),
+                new THREE.SphereGeometry(0.028, 8, 6),
                 eyeMaterial,
             );
-            eye.position.set(0.36, 0.25, z);
+            eye.position.set(0.48, 0.9, z);
             group.add(eye);
         }
 
@@ -1133,7 +1499,13 @@ export class SalemScene implements SalemSceneHandle {
     };
 
     private readonly onPointerDown = (event: PointerEvent): void => {
-        this.pointerStart = { x: event.clientX, rotation: this.rootRotation };
+        this.pointerStart = {
+            x: event.clientX,
+            y: event.clientY,
+            rotation: this.rootRotation,
+            dragging: false,
+        };
+        this.renderer.domElement.style.cursor = 'grabbing';
         this.renderer.domElement.setPointerCapture(event.pointerId);
     };
 
@@ -1141,6 +1513,12 @@ export class SalemScene implements SalemSceneHandle {
         if (!this.pointerStart) {
             return;
         }
+
+        const movement = Math.hypot(
+            event.clientX - this.pointerStart.x,
+            event.clientY - this.pointerStart.y,
+        );
+        this.pointerStart.dragging ||= movement > 5;
 
         const delta = (event.clientX - this.pointerStart.x) / 420;
         this.rootRotation = THREE.MathUtils.clamp(
@@ -1150,9 +1528,128 @@ export class SalemScene implements SalemSceneHandle {
         );
     };
 
-    private readonly onPointerUp = (): void => {
+    private readonly onPointerUp = (event: PointerEvent): void => {
+        if (this.pointerStart && !this.pointerStart.dragging) {
+            this.handleWorldClick(event);
+        }
+
+        if (this.renderer.domElement.hasPointerCapture(event.pointerId)) {
+            this.renderer.domElement.releasePointerCapture(event.pointerId);
+        }
+
         this.pointerStart = null;
+        this.renderer.domElement.style.cursor = 'grab';
     };
+
+    private handleWorldClick(event: PointerEvent): void {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.pointer.set(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        this.raycaster.setFromCamera(this.pointer, this.camera);
+
+        const hits = this.raycaster.intersectObjects(
+            [...this.interactionTargets.keys()],
+            true,
+        );
+        const hit = hits.find((item) =>
+            this.findInteractionTarget(item.object),
+        );
+
+        if (!hit) {
+            return;
+        }
+
+        const target = this.findInteractionTarget(hit.object);
+
+        if (!target) {
+            return;
+        }
+
+        if (target.weather) {
+            this.setWeather(target.weather);
+            this.options.onWeatherChange(target.weather);
+        }
+
+        if (target.action === 'program') {
+            this.startProgramming();
+
+            return;
+        }
+
+        if (target.action === 'inspect') {
+            this.forceAction('inspect');
+            this.manualMoveTarget = target.target;
+            this.options.onActionRequest('inspect');
+
+            return;
+        }
+
+        const destination = (
+            target.target ?? this.root.worldToLocal(hit.point.clone())
+        ).clone();
+
+        if (this.isNearProgrammingArea(destination)) {
+            this.startProgramming();
+
+            return;
+        }
+
+        destination.y += 0.02;
+        this.moveSalemTo(destination);
+        this.options.onActionRequest('walk');
+    }
+
+    private startProgramming(): void {
+        this.forceAction('program');
+        this.options.onActionRequest('program');
+    }
+
+    private isNearProgrammingArea(point: THREE.Vector3): boolean {
+        const laptop = new THREE.Vector3(...programmingSpot.laptop);
+        const seat = new THREE.Vector3(...programmingSpot.seat);
+
+        return point.distanceTo(laptop) < 1.15 || point.distanceTo(seat) < 1.05;
+    }
+
+    private moveSalemTo(target: THREE.Vector3): void {
+        this.manualMoveTarget = target.clone();
+        const delta = target.clone().sub(this.catAnchor.position);
+
+        if (delta.lengthSq() > 0.001) {
+            this.desiredFacing = Math.atan2(delta.x, delta.z) - Math.PI * 0.5;
+        }
+
+        this.currentAction = 'walk';
+        this.actionStartedAt = performance.now();
+        this.options.onActionChange('walk');
+    }
+
+    private registerInteraction(
+        object: THREE.Object3D,
+        target: InteractionTarget,
+    ): void {
+        this.interactionTargets.set(object, target);
+    }
+
+    private findInteractionTarget(
+        object: THREE.Object3D,
+    ): InteractionTarget | undefined {
+        let current: THREE.Object3D | null = object;
+
+        while (current) {
+            const target = this.interactionTargets.get(current);
+
+            if (target) {
+                return target;
+            }
+
+            current = current.parent;
+        }
+
+        return undefined;
+    }
 
     private readonly onWheel = (event: WheelEvent): void => {
         event.preventDefault();
@@ -1171,6 +1668,8 @@ export class SalemScene implements SalemSceneHandle {
 
         if (!document.hidden) {
             this.updateRoot(delta);
+            this.updateFloatingIslands(elapsed);
+            this.updateAnimatedFeatures(elapsed);
             this.updateWaterfalls(elapsed);
             this.updateWeatherParticles(elapsed);
             this.updateSalem(delta, elapsed);
@@ -1187,6 +1686,24 @@ export class SalemScene implements SalemSceneHandle {
             5,
             delta,
         );
+    }
+
+    private updateFloatingIslands(elapsed: number): void {
+        this.floatingIslands.forEach((island) => {
+            island.group.position.y =
+                island.baseY +
+                Math.sin(elapsed * island.speed + island.phase) *
+                    island.amplitude;
+        });
+    }
+
+    private updateAnimatedFeatures(elapsed: number): void {
+        this.animatedFeatures.forEach((feature) => {
+            feature.object.position.y =
+                feature.baseY +
+                Math.sin(elapsed * 1.8 + feature.phase) * feature.bob;
+            feature.object.rotation.y += feature.spin * 0.016;
+        });
     }
 
     private updateWaterfalls(elapsed: number): void {
@@ -1264,6 +1781,17 @@ export class SalemScene implements SalemSceneHandle {
         this.updateLaptop(elapsed);
 
         if (
+            this.currentAction === 'walk' &&
+            this.manualMoveTarget &&
+            this.catAnchor.position.distanceTo(this.manualMoveTarget) < 0.08
+        ) {
+            this.manualMoveTarget = undefined;
+            this.forceAction('idle');
+
+            return;
+        }
+
+        if (
             elapsedMs > actionDuration(this.currentAction) &&
             this.currentAction !== 'idle'
         ) {
@@ -1295,6 +1823,14 @@ export class SalemScene implements SalemSceneHandle {
         }
 
         if (action === 'walk') {
+            if (this.manualMoveTarget) {
+                return [
+                    this.manualMoveTarget.x,
+                    this.manualMoveTarget.y,
+                    this.manualMoveTarget.z,
+                ];
+            }
+
             return [
                 Math.sin(elapsed * 0.45) * 1.25,
                 0.7,
@@ -1316,6 +1852,10 @@ export class SalemScene implements SalemSceneHandle {
 
         if (action === 'sleep') {
             return 0.2;
+        }
+
+        if (action === 'walk') {
+            return this.desiredFacing;
         }
 
         return -0.55;
