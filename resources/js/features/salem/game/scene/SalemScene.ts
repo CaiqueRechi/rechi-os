@@ -6,10 +6,12 @@ import { weatherPresets } from '../../environment/weather';
 import { actionDuration, sequenceStepAt } from '../../state/salem-actions';
 import { salemHome, islandConfigs, programmingSpot } from '../../world/islands';
 import type {
+    IslandAssetPlacement,
     IslandAssetRole,
     IslandBiome,
     IslandConfig,
 } from '../../world/islands';
+import { SalemAssetLoader } from '../assets/SalemAssetLoader';
 
 type SalemSceneOptions = {
     onActionChange: (action: SalemAction) => void;
@@ -69,6 +71,8 @@ export class SalemScene implements SalemSceneHandle {
     private readonly camera: THREE.OrthographicCamera;
 
     private readonly renderer: THREE.WebGLRenderer;
+
+    private readonly assetLoader = new SalemAssetLoader();
 
     private readonly waterFalls: Waterfall[] = [];
 
@@ -791,13 +795,78 @@ export class SalemScene implements SalemSceneHandle {
 
     private addAssetRole(
         group: THREE.Group,
-        _island: IslandConfig,
-        _role: IslandAssetRole,
+        island: IslandConfig,
+        role: IslandAssetRole,
         fallback?: THREE.Group,
     ): void {
+        if (!this.shouldUseDetailedAssets(island)) {
+            if (fallback) {
+                group.add(fallback);
+            }
+
+            return;
+        }
+
+        const placements = island.assetPlacements?.filter(
+            (placement) => placement.role === role,
+        );
+
+        if (!placements?.length) {
+            if (fallback) {
+                group.add(fallback);
+            }
+
+            return;
+        }
+
         if (fallback) {
             group.add(fallback);
         }
+
+        void this.loadAssetPlacements(placements).then((assets) => {
+            if (assets.length === 0) {
+                return;
+            }
+
+            if (fallback) {
+                group.remove(fallback);
+                this.disposeObject(fallback);
+            }
+
+            assets.forEach((asset) => group.add(asset));
+        });
+    }
+
+    private shouldUseDetailedAssets(island: IslandConfig): boolean {
+        return ['home', 'meadow', 'rocky', 'tropical', 'autumn'].includes(
+            island.id,
+        );
+    }
+
+    private async loadAssetPlacements(
+        placements: IslandAssetPlacement[],
+    ): Promise<THREE.Group[]> {
+        const loaded = await Promise.allSettled(
+            placements.map((placement) =>
+                this.assetLoader.createStaticInstance(placement.asset, {
+                    position: placement.position,
+                    rotation: placement.rotation,
+                    scale: placement.scale,
+                }),
+            ),
+        );
+
+        const assets = loaded.flatMap((result) =>
+            result.status === 'fulfilled' ? [result.value] : [],
+        );
+
+        if (assets.length !== placements.length) {
+            this.options.onAssetError(
+                'Some Salem scenery models could not load, using fallbacks.',
+            );
+        }
+
+        return assets;
     }
 
     private disposeObject(object: THREE.Object3D): void {
