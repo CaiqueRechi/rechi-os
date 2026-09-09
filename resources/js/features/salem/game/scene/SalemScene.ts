@@ -1486,7 +1486,7 @@ export class SalemScene implements SalemSceneHandle {
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
         const aspect = width / Math.max(height, 1);
-        const frustum = width < 720 ? 7.5 : 6.65;
+        const frustum = width < 720 ? 8.4 : 7.85;
 
         this.camera.left = (-frustum * aspect) / 2;
         this.camera.right = (frustum * aspect) / 2;
@@ -1521,11 +1521,7 @@ export class SalemScene implements SalemSceneHandle {
         this.pointerStart.dragging ||= movement > 5;
 
         const delta = (event.clientX - this.pointerStart.x) / 420;
-        this.rootRotation = THREE.MathUtils.clamp(
-            this.pointerStart.rotation + delta,
-            -0.78,
-            0.55,
-        );
+        this.rootRotation = this.pointerStart.rotation + delta;
     };
 
     private readonly onPointerUp = (event: PointerEvent): void => {
@@ -1654,9 +1650,9 @@ export class SalemScene implements SalemSceneHandle {
     private readonly onWheel = (event: WheelEvent): void => {
         event.preventDefault();
         const zoom = THREE.MathUtils.clamp(
-            this.camera.zoom + (event.deltaY > 0 ? -0.08 : 0.08),
-            0.82,
-            1.35,
+            this.camera.zoom + (event.deltaY > 0 ? -0.07 : 0.07),
+            0.64,
+            1.24,
         );
         this.camera.zoom = zoom;
         this.camera.updateProjectionMatrix();
