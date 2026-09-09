@@ -1,8 +1,5 @@
 # Attribution
 
-`salem-cat.glb` is the Cat model by J-Toastie from Poly Pizza.
-
-Source: https://poly.pizza/m/DJ9rpAhrh3
-
-License: Creative Commons Attribution 3.0
-https://creativecommons.org/licenses/by/3.0/
+The Salem public scene bundles CC0/Public Domain models by Quaternius.
+Attribution is not required by the license, but source details are kept in
+`ASSET_CREDITS.md` at the repository root.

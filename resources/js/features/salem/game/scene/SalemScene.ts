@@ -1,12 +1,17 @@
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { SalemAction, SalemWeather } from '@/types';
 
 import { weatherPresets } from '../../environment/weather';
 import { actionDuration, sequenceStepAt } from '../../state/salem-actions';
 import { salemHome, islandConfigs, programmingSpot } from '../../world/islands';
-import type { IslandBiome, IslandConfig } from '../../world/islands';
+import type {
+    IslandAssetPlacement,
+    IslandAssetRole,
+    IslandBiome,
+    IslandConfig,
+} from '../../world/islands';
+import { SalemAssetLoader } from '../assets/SalemAssetLoader';
 
 type SalemSceneOptions = {
     onActionChange: (action: SalemAction) => void;
@@ -40,7 +45,7 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly renderer: THREE.WebGLRenderer;
 
-    private readonly loader = new GLTFLoader();
+    private readonly assetLoader = new SalemAssetLoader();
 
     private readonly waterFalls: Waterfall[] = [];
 
@@ -54,7 +59,15 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly options: SalemSceneOptions;
 
+    private readonly salemActions = new Map<string, THREE.AnimationAction>();
+
     private animationFrame: number | null = null;
+
+    private salemMixer?: THREE.AnimationMixer;
+
+    private activeSalemAnimation?: THREE.AnimationAction;
+
+    private activeSalemAnimationName?: string;
 
     private sunlight?: THREE.DirectionalLight;
 
@@ -151,34 +164,18 @@ export class SalemScene implements SalemSceneHandle {
         );
         window.removeEventListener('pointerup', this.onPointerUp);
         this.renderer.domElement.removeEventListener('wheel', this.onWheel);
-        this.scene.traverse((object) => {
-            const mesh = object as THREE.Mesh;
-
-            if (mesh.geometry) {
-                mesh.geometry.dispose();
-            }
-
-            const material = mesh.material;
-
-            if (Array.isArray(material)) {
-                material.forEach((item) => item.dispose());
-
-                return;
-            }
-
-            material?.dispose();
-        });
+        this.disposeObject(this.scene);
         this.renderer.dispose();
         this.renderer.domElement.remove();
     }
 
     private configureRenderer(): void {
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.8));
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.9));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.05;
+        this.renderer.toneMappingExposure = 1.12;
         this.renderer.domElement.className = 'block size-full';
         this.container.appendChild(this.renderer.domElement);
     }
@@ -190,10 +187,10 @@ export class SalemScene implements SalemSceneHandle {
         this.scene.add(this.atmosphere);
         this.scene.add(this.root);
 
-        this.hemisphere = new THREE.HemisphereLight('#eafaff', '#7f8c66', 2.2);
+        this.hemisphere = new THREE.HemisphereLight('#eefcff', '#83745f', 2.15);
         this.scene.add(this.hemisphere);
 
-        this.sunlight = new THREE.DirectionalLight('#fff3c4', 2.55);
+        this.sunlight = new THREE.DirectionalLight('#fff2c8', 2.7);
         this.sunlight.position.set(-5, 9, 7);
         this.sunlight.castShadow = true;
         this.sunlight.shadow.mapSize.set(2048, 2048);
@@ -203,7 +200,7 @@ export class SalemScene implements SalemSceneHandle {
         this.sunlight.shadow.camera.bottom = -8;
         this.scene.add(this.sunlight);
 
-        const fillLight = new THREE.DirectionalLight('#87d5ff', 0.75);
+        const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.82);
         fillLight.position.set(6, 3, -5);
         this.scene.add(fillLight);
 
@@ -237,7 +234,8 @@ export class SalemScene implements SalemSceneHandle {
             ),
             new THREE.MeshStandardMaterial({
                 color: island.color,
-                roughness: 0.72,
+                roughness: 0.86,
+                flatShading: true,
             }),
         );
         grass.position.y = island.height * 0.5;
@@ -256,6 +254,7 @@ export class SalemScene implements SalemSceneHandle {
             new THREE.MeshStandardMaterial({
                 color: '#325f48',
                 roughness: 0.82,
+                flatShading: true,
             }),
         );
         rim.position.y = island.height * 0.34;
@@ -404,11 +403,11 @@ export class SalemScene implements SalemSceneHandle {
 
     private addIslandProps(group: THREE.Group, island: IslandConfig): void {
         if (island.props.includes('cabin')) {
-            group.add(this.createCabin());
+            this.addAssetRole(group, island, 'cabin', this.createCabin());
         }
 
         if (island.props.includes('chair')) {
-            group.add(this.createChair());
+            this.addAssetRole(group, island, 'chair', this.createChair());
         }
 
         if (island.props.includes('laptop')) {
@@ -416,15 +415,30 @@ export class SalemScene implements SalemSceneHandle {
         }
 
         if (island.props.includes('trees')) {
-            this.addTrees(group, island.biome);
+            this.addAssetRole(
+                group,
+                island,
+                'trees',
+                this.createTrees(island.biome),
+            );
         }
 
         if (island.props.includes('flowers')) {
-            this.addFlowers(group, island.radius);
+            this.addAssetRole(
+                group,
+                island,
+                'flowers',
+                this.createFlowers(island.radius),
+            );
         }
 
         if (island.props.includes('rocks')) {
-            this.addRocks(group, island.radius);
+            this.addAssetRole(
+                group,
+                island,
+                'rocks',
+                this.createRocks(island.radius),
+            );
         }
 
         if (island.props.includes('pool')) {
@@ -436,8 +450,92 @@ export class SalemScene implements SalemSceneHandle {
         }
 
         if (island.props.includes('stumps')) {
-            group.add(this.createStump());
+            this.addAssetRole(group, island, 'stumps', this.createStump());
         }
+
+        this.addAssetRole(group, island, 'decor');
+    }
+
+    private addAssetRole(
+        group: THREE.Group,
+        island: IslandConfig,
+        role: IslandAssetRole,
+        fallback?: THREE.Group,
+    ): void {
+        const placements = island.assetPlacements?.filter(
+            (placement) => placement.role === role,
+        );
+
+        if (!placements?.length) {
+            if (fallback) {
+                group.add(fallback);
+            }
+
+            return;
+        }
+
+        if (fallback) {
+            group.add(fallback);
+        }
+
+        void this.loadAssetPlacements(placements).then((assets) => {
+            if (assets.length === 0) {
+                return;
+            }
+
+            if (fallback) {
+                group.remove(fallback);
+                this.disposeObject(fallback);
+            }
+
+            assets.forEach((asset) => group.add(asset));
+        });
+    }
+
+    private async loadAssetPlacements(
+        placements: IslandAssetPlacement[],
+    ): Promise<THREE.Group[]> {
+        const loaded = await Promise.allSettled(
+            placements.map((placement) =>
+                this.assetLoader.createStaticInstance(placement.asset, {
+                    position: placement.position,
+                    rotation: placement.rotation,
+                    scale: placement.scale,
+                }),
+            ),
+        );
+
+        const assets = loaded.flatMap((result) =>
+            result.status === 'fulfilled' ? [result.value] : [],
+        );
+
+        if (assets.length !== placements.length) {
+            this.options.onAssetError(
+                'Some Salem scenery models could not load, using fallbacks.',
+            );
+        }
+
+        return assets;
+    }
+
+    private disposeObject(object: THREE.Object3D): void {
+        object.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+
+            if (mesh.geometry) {
+                mesh.geometry.dispose();
+            }
+
+            const material = mesh.material;
+
+            if (Array.isArray(material)) {
+                material.forEach((item) => item.dispose());
+
+                return;
+            }
+
+            material?.dispose();
+        });
     }
 
     private createCabin(): THREE.Group {
@@ -581,7 +679,8 @@ export class SalemScene implements SalemSceneHandle {
         return group;
     }
 
-    private addTrees(group: THREE.Group, biome: IslandBiome): void {
+    private createTrees(biome: IslandBiome): THREE.Group {
+        const group = new THREE.Group();
         const leafColors: Record<IslandBiome, string[]> = {
             home: ['#2f7d54', '#68a85a'],
             meadow: ['#3f9a55', '#88c95f'],
@@ -636,9 +735,12 @@ export class SalemScene implements SalemSceneHandle {
             tree.add(lowerLeaves);
             group.add(tree);
         });
+
+        return group;
     }
 
-    private addFlowers(group: THREE.Group, radius: number): void {
+    private createFlowers(radius: number): THREE.Group {
+        const group = new THREE.Group();
         const colors = ['#f8c8dc', '#ffe28a', '#c7f9ff'];
 
         for (let index = 0; index < 18; index += 1) {
@@ -658,9 +760,13 @@ export class SalemScene implements SalemSceneHandle {
             flower.castShadow = true;
             group.add(flower);
         }
+
+        return group;
     }
 
-    private addRocks(group: THREE.Group, radius: number): void {
+    private createRocks(radius: number): THREE.Group {
+        const group = new THREE.Group();
+
         for (let index = 0; index < 9; index += 1) {
             const angle = index * 1.77;
             const rock = new THREE.Mesh(
@@ -680,6 +786,8 @@ export class SalemScene implements SalemSceneHandle {
             rock.castShadow = true;
             group.add(rock);
         }
+
+        return group;
     }
 
     private addPool(group: THREE.Group): void {
@@ -927,27 +1035,50 @@ export class SalemScene implements SalemSceneHandle {
     }
 
     private loadSalemAsset(): void {
-        this.loader.load(
-            '/assets/salem/salem-cat.glb',
-            (gltf) => {
+        void this.assetLoader
+            .load('salem')
+            .then((gltf) => {
                 const model = gltf.scene;
-                model.scale.setScalar(0.34);
+                model.scale.setScalar(0.0047);
                 model.rotation.y = Math.PI * 0.5;
-                model.traverse((object) => {
-                    object.castShadow = true;
-                    object.receiveShadow = true;
-                });
+                this.assetLoader.configureShadows(model);
+                this.assetLoader.applyMaterialTheme('salem', model);
+
                 this.catAnchor.clear();
                 this.catAnchor.add(model);
+                this.catAnchor.add(this.createSalemFaceAccent());
                 this.catAnchor.add(this.programmingPaws);
-            },
-            undefined,
-            () => {
+
+                this.salemMixer = new THREE.AnimationMixer(model);
+                gltf.animations.forEach((clip) => {
+                    this.salemActions.set(
+                        clip.name,
+                        this.salemMixer!.clipAction(clip),
+                    );
+                });
+                this.playSalemAnimation('Idle');
+            })
+            .catch(() => {
                 this.options.onAssetError(
                     'Salem model could not load, using fallback cat.',
                 );
-            },
-        );
+            });
+    }
+
+    private createSalemFaceAccent(): THREE.Group {
+        const group = new THREE.Group();
+        const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#9ff6cf' });
+
+        for (const z of [-0.085, 0.085]) {
+            const eye = new THREE.Mesh(
+                new THREE.SphereGeometry(0.022, 8, 6),
+                eyeMaterial,
+            );
+            eye.position.set(0.36, 0.25, z);
+            group.add(eye);
+        }
+
+        return group;
     }
 
     private createProgrammingPaws(): void {
@@ -1126,6 +1257,8 @@ export class SalemScene implements SalemSceneHandle {
             7,
             delta,
         );
+        this.updateSalemAnimation(this.currentAction, step.phase);
+        this.salemMixer?.update(delta);
         this.programmingPaws.visible =
             this.currentAction === 'program' && step.phase === 'acting';
         this.updateLaptop(elapsed);
@@ -1202,6 +1335,51 @@ export class SalemScene implements SalemSceneHandle {
         }
 
         return 1 + Math.sin(elapsed * 2.8) * 0.025;
+    }
+
+    private updateSalemAnimation(action: SalemAction, phase: string): void {
+        if (phase === 'moving' || action === 'walk') {
+            this.playSalemAnimation('Walk');
+
+            return;
+        }
+
+        if (action === 'inspect') {
+            this.playSalemAnimation('Yes');
+
+            return;
+        }
+
+        this.playSalemAnimation('Idle');
+    }
+
+    private playSalemAnimation(name: string): void {
+        const animationName = this.resolveSalemAnimationName(name);
+
+        if (!animationName || animationName === this.activeSalemAnimationName) {
+            return;
+        }
+
+        const nextAction = this.salemActions.get(animationName);
+
+        if (!nextAction) {
+            return;
+        }
+
+        nextAction.reset().fadeIn(0.2).play();
+        this.activeSalemAnimation?.fadeOut(0.2);
+        this.activeSalemAnimation = nextAction;
+        this.activeSalemAnimationName = animationName;
+    }
+
+    private resolveSalemAnimationName(name: string): string | undefined {
+        if (this.salemActions.has(name)) {
+            return name;
+        }
+
+        return [...this.salemActions.keys()].find((animationName) =>
+            animationName.endsWith(`|${name}`),
+        );
     }
 
     private updateLaptop(elapsed: number): void {

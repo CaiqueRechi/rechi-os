@@ -38,6 +38,6 @@ class SecurityHeaders
         $viteHttpSource = app()->isLocal() ? ' http://127.0.0.1:5173' : '';
         $viteWebSocketSource = app()->isLocal() ? ' ws://127.0.0.1:5173' : '';
 
-        return "default-src 'self'; script-src 'self' 'unsafe-inline'{$viteHttpSource}; style-src 'self' 'unsafe-inline'{$viteHttpSource}; img-src 'self' data:{$viteHttpSource}; connect-src 'self'{$viteHttpSource}{$viteWebSocketSource}; font-src 'self' data:{$viteHttpSource}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+        return "default-src 'self'; script-src 'self' 'unsafe-inline'{$viteHttpSource}; style-src 'self' 'unsafe-inline'{$viteHttpSource}; img-src 'self' data: blob:{$viteHttpSource}; connect-src 'self'{$viteHttpSource}{$viteWebSocketSource}; font-src 'self' data:{$viteHttpSource}; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
     }
 }

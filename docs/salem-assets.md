@@ -1,29 +1,23 @@
 # Salem Asset Manifest
 
-## Cat
+The public `/salem` scene uses bundled low-poly GLB assets for the main cat,
+home island scenery, vegetation, rocks and props. Runtime primitive meshes remain
+only for terrain, water, lighting, particles, the laptop interaction and fallback
+rendering if a model cannot load.
 
-- Asset name: Cat
-- Purpose: Salem protagonist model
-- Author: J-Toastie
-- Source page: https://poly.pizza/m/DJ9rpAhrh3
-- Source library: Poly Pizza
-- License: Creative Commons Attribution 3.0
-- Attribution requirement: credit J-Toastie and link the source/license
-- Local file path: `public/assets/salem/salem-cat.glb`
-- Modified/optimized: no
-- Modification notes: downloaded as the published GLB and used directly
+See `ASSET_CREDITS.md` for source and license details.
 
-## Procedural World Geometry
+## Runtime Manifest
 
-- Asset name: Salem floating island procedural meshes
-- Purpose: islands, cabin, chair, laptop, waterfalls, vegetation, rocks, fog
-  particles and fallback cat
-- Author: CaiqueRechi/rechi-os implementation
-- Source page: not applicable
-- Source library: not applicable
-- License: project code license
-- Attribution requirement: none beyond the repository license
-- Local file path: generated at runtime from `resources/js/features/salem`
-- Modified/optimized: not applicable
-- Modification notes: geometry is created with Three.js primitives and reused
-  where practical
+- Character: `public/assets/salem/models/characters/salem-cat-quaternius.glb`
+- Buildings: `public/assets/salem/models/buildings/home-cabin.glb`
+- Environment:
+  `public/assets/salem/models/environment/{bush,bush-flowers,fern,flower-group,grass,grass-wispy,path-round-wide,pine-a,pine-b,rock-medium-a,rock-medium-b,rock-medium-c,tall-grass,tree-oak-a,tree-oak-b,tree-round,twisted-tree}.glb`
+- Props: `public/assets/salem/models/props/{barrel,bench,crate,fence}.glb`
+
+## Modification Notes
+
+- Models were downloaded as GLB/GLTF sources from Poly Pizza and Quaternius.
+- Models were optimized locally for web delivery with glTF Transform, WebP
+  textures and reduced texture size.
+- The previous CC-BY cat model was removed from the runtime bundle.
