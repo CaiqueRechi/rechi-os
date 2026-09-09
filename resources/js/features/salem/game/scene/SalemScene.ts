@@ -337,6 +337,8 @@ export class SalemScene implements SalemSceneHandle {
 
         this.addGrassDetails(group, island, islandScale);
 
+        this.addGroundScatter(group, island, islandScale);
+
         this.addIslandProps(group, island);
 
         this.addBiomeFeatures(group, island);
@@ -511,6 +513,397 @@ export class SalemScene implements SalemSceneHandle {
         };
 
         return colors[biome];
+    }
+
+    private addGroundScatter(
+        group: THREE.Group,
+        island: IslandConfig,
+        islandScale: THREE.Vector3 | null,
+    ): void {
+        const scale = islandScale ?? new THREE.Vector3(1, 1, 1);
+        group.add(this.createGrassScatter(island, scale));
+        group.add(this.createPebbleScatter(island, scale));
+
+        if (island.props.includes('trees')) {
+            group.add(this.createSaplingScatter(island, scale));
+        }
+    }
+
+    private createGrassScatter(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+    ): THREE.InstancedMesh {
+        const count =
+            island.id === 'home' ? 120 : Math.round(28 + island.radius * 18);
+        const colors = this.scatterColorsForBiome(island.biome);
+        const grass = new THREE.InstancedMesh(
+            new THREE.ConeGeometry(0.025, 0.28, 3),
+            new THREE.MeshStandardMaterial({
+                color: colors.grass,
+                roughness: 0.92,
+                flatShading: true,
+                vertexColors: true,
+            }),
+            count,
+        );
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const size = new THREE.Vector3();
+
+        for (let index = 0; index < count; index += 1) {
+            position.copy(
+                this.scatterPointOnIsland(island, islandScale, index, 31.7),
+            );
+            position.y += 0.08;
+            rotation.set(
+                this.randomSigned(index, 3.7) * 0.18,
+                this.random(index, 8.9) * Math.PI * 2,
+                this.randomSigned(index, 11.2) * 0.14,
+            );
+            quaternion.setFromEuler(rotation);
+            const height = 0.72 + this.random(index, 18.4) * 0.62;
+            size.set(
+                0.78 + this.random(index, 41.2) * 0.55,
+                height,
+                0.78 + this.random(index, 51.2) * 0.42,
+            );
+            matrix.compose(position, quaternion, size);
+            grass.setMatrixAt(index, matrix);
+            grass.setColorAt(
+                index,
+                new THREE.Color(
+                    this.random(index, 4.8) > 0.45
+                        ? colors.grass
+                        : colors.grassAccent,
+                ),
+            );
+        }
+
+        grass.receiveShadow = true;
+
+        return grass;
+    }
+
+    private createPebbleScatter(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+    ): THREE.InstancedMesh {
+        const count =
+            island.id === 'home' ? 48 : Math.round(12 + island.radius * 10);
+        const colors = this.scatterColorsForBiome(island.biome);
+        const pebbles = new THREE.InstancedMesh(
+            new THREE.DodecahedronGeometry(0.065, 0),
+            new THREE.MeshStandardMaterial({
+                color: colors.stone,
+                roughness: 0.96,
+                flatShading: true,
+                vertexColors: true,
+            }),
+            count,
+        );
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const size = new THREE.Vector3();
+
+        for (let index = 0; index < count; index += 1) {
+            position.copy(
+                this.scatterPointOnIsland(island, islandScale, index, 73.1),
+            );
+            position.y += 0.015;
+            rotation.set(
+                this.random(index, 2.1) * Math.PI,
+                this.random(index, 5.2) * Math.PI,
+                this.random(index, 7.6) * Math.PI,
+            );
+            quaternion.setFromEuler(rotation);
+            const pebbleSize = 0.45 + this.random(index, 13.8) * 0.82;
+            size.set(
+                pebbleSize * (0.8 + this.random(index, 22.1) * 0.75),
+                pebbleSize * (0.28 + this.random(index, 28.6) * 0.28),
+                pebbleSize * (0.78 + this.random(index, 35.4) * 0.55),
+            );
+            matrix.compose(position, quaternion, size);
+            pebbles.setMatrixAt(index, matrix);
+            pebbles.setColorAt(
+                index,
+                new THREE.Color(
+                    this.random(index, 1.8) > 0.5
+                        ? colors.stone
+                        : colors.stoneAccent,
+                ),
+            );
+        }
+
+        pebbles.castShadow = true;
+        pebbles.receiveShadow = true;
+
+        return pebbles;
+    }
+
+    private createSaplingScatter(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+    ): THREE.Group {
+        const group = new THREE.Group();
+        const count =
+            island.id === 'home'
+                ? 8
+                : Math.max(3, Math.round(island.radius * 2.2));
+        const colors = this.scatterColorsForBiome(island.biome);
+        const trunks = new THREE.InstancedMesh(
+            new THREE.CylinderGeometry(0.025, 0.04, 0.42, 5),
+            new THREE.MeshStandardMaterial({
+                color: '#6b4935',
+                roughness: 0.9,
+                flatShading: true,
+            }),
+            count,
+        );
+        const canopies = new THREE.InstancedMesh(
+            new THREE.ConeGeometry(0.18, 0.46, 6),
+            new THREE.MeshStandardMaterial({
+                color: colors.tree,
+                roughness: 0.86,
+                flatShading: true,
+                vertexColors: true,
+            }),
+            count,
+        );
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const size = new THREE.Vector3();
+
+        for (let index = 0; index < count; index += 1) {
+            position.copy(
+                this.scatterPointOnIsland(island, islandScale, index, 129.3),
+            );
+            rotation.set(0, this.random(index, 9.4) * Math.PI * 2, 0);
+            quaternion.setFromEuler(rotation);
+            const treeSize =
+                island.id === 'home'
+                    ? 0.72 + this.random(index, 44.5) * 0.34
+                    : 0.58 + this.random(index, 44.5) * 0.32;
+
+            position.y += 0.2 * treeSize;
+            size.setScalar(treeSize);
+            matrix.compose(position, quaternion, size);
+            trunks.setMatrixAt(index, matrix);
+
+            position.y += 0.33 * treeSize;
+            size.setScalar(treeSize * (0.82 + this.random(index, 18.9) * 0.28));
+            matrix.compose(position, quaternion, size);
+            canopies.setMatrixAt(index, matrix);
+            canopies.setColorAt(
+                index,
+                new THREE.Color(
+                    this.random(index, 7.1) > 0.45
+                        ? colors.tree
+                        : colors.treeAccent,
+                ),
+            );
+        }
+
+        trunks.castShadow = true;
+        canopies.castShadow = true;
+        group.add(trunks);
+        group.add(canopies);
+
+        return group;
+    }
+
+    private scatterPointOnIsland(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+        index: number,
+        seed: number,
+    ): THREE.Vector3 {
+        let angle = 0;
+        let distance = 0;
+
+        for (let attempt = 0; attempt < 8; attempt += 1) {
+            const cursor = index + attempt * 19;
+            angle = cursor * 2.399963 + this.random(cursor, seed) * 0.52;
+            distance =
+                island.radius * (0.18 + this.random(cursor, seed + 7.1) * 0.72);
+            const point = new THREE.Vector3(
+                Math.cos(angle) * distance * islandScale.x,
+                island.height * 0.5 + 0.17,
+                Math.sin(angle) * distance * islandScale.z,
+            );
+
+            if (!this.isProtectedScatterPoint(island, point)) {
+                return point;
+            }
+        }
+
+        return new THREE.Vector3(
+            Math.cos(angle) * distance * islandScale.x,
+            island.height * 0.5 + 0.17,
+            Math.sin(angle) * distance * islandScale.z,
+        );
+    }
+
+    private isProtectedScatterPoint(
+        island: IslandConfig,
+        point: THREE.Vector3,
+    ): boolean {
+        if (island.id !== 'home') {
+            return false;
+        }
+
+        const protectedZones = [
+            { x: -0.95, z: -0.88, radius: 1.05 },
+            { x: 1.92, z: 1.2, radius: 0.78 },
+            {
+                x: programmingSpot.laptop[0],
+                z: programmingSpot.laptop[2],
+                radius: 0.72,
+            },
+            { x: salemHome.idle[0], z: salemHome.idle[2], radius: 0.48 },
+        ];
+
+        return protectedZones.some((zone) => {
+            const x = point.x - zone.x;
+            const z = point.z - zone.z;
+
+            return Math.hypot(x, z) < zone.radius;
+        });
+    }
+
+    private scatterColorsForBiome(biome: IslandBiome): {
+        grass: string;
+        grassAccent: string;
+        stone: string;
+        stoneAccent: string;
+        tree: string;
+        treeAccent: string;
+    } {
+        const colors: Record<
+            IslandBiome,
+            {
+                grass: string;
+                grassAccent: string;
+                stone: string;
+                stoneAccent: string;
+                tree: string;
+                treeAccent: string;
+            }
+        > = {
+            autumn: {
+                grass: '#c58a45',
+                grassAccent: '#d6a65d',
+                stone: '#73695e',
+                stoneAccent: '#9a8b73',
+                tree: '#a9553b',
+                treeAccent: '#d18b42',
+            },
+            crystal: {
+                grass: '#6fd1c9',
+                grassAccent: '#9df9f2',
+                stone: '#648a9a',
+                stoneAccent: '#b4f3ff',
+                tree: '#74d7dd',
+                treeAccent: '#b492ff',
+            },
+            desert: {
+                grass: '#c89446',
+                grassAccent: '#e5bd68',
+                stone: '#8b684e',
+                stoneAccent: '#b68b62',
+                tree: '#b8843d',
+                treeAccent: '#dfae56',
+            },
+            home: {
+                grass: '#4f9a5b',
+                grassAccent: '#8bcf68',
+                stone: '#747c74',
+                stoneAccent: '#a0a28f',
+                tree: '#2f7d54',
+                treeAccent: '#69a85d',
+            },
+            lavender: {
+                grass: '#879e62',
+                grassAccent: '#bfa0ee',
+                stone: '#756b7f',
+                stoneAccent: '#a594b7',
+                tree: '#758855',
+                treeAccent: '#a98bdd',
+            },
+            lunar: {
+                grass: '#7f8792',
+                grassAccent: '#c7cedd',
+                stone: '#5e6470',
+                stoneAccent: '#969dab',
+                tree: '#7b8498',
+                treeAccent: '#c7ccd9',
+            },
+            mangrove: {
+                grass: '#34795f',
+                grassAccent: '#60b17a',
+                stone: '#56665b',
+                stoneAccent: '#8b9a7d',
+                tree: '#236b54',
+                treeAccent: '#4b9b66',
+            },
+            meadow: {
+                grass: '#5ca65a',
+                grassAccent: '#a2d66b',
+                stone: '#7b8175',
+                stoneAccent: '#a6aa91',
+                tree: '#3f9a55',
+                treeAccent: '#88c95f',
+            },
+            nebula: {
+                grass: '#6575d6',
+                grassAccent: '#df85ff',
+                stone: '#505583',
+                stoneAccent: '#9aa2ee',
+                tree: '#5f7cff',
+                treeAccent: '#d66bf0',
+            },
+            rocky: {
+                grass: '#7b8879',
+                grassAccent: '#a8b99b',
+                stone: '#667077',
+                stoneAccent: '#9aa1a0',
+                tree: '#718078',
+                treeAccent: '#a1aa91',
+            },
+            tropical: {
+                grass: '#238f6f',
+                grassAccent: '#66cf93',
+                stone: '#5d746b',
+                stoneAccent: '#8d9b86',
+                tree: '#1d9073',
+                treeAccent: '#54c28b',
+            },
+            tundra: {
+                grass: '#93b8aa',
+                grassAccent: '#d7f5ec',
+                stone: '#738089',
+                stoneAccent: '#b9c5c8',
+                tree: '#7aa294',
+                treeAccent: '#d9f6ee',
+            },
+        };
+
+        return colors[biome];
+    }
+
+    private random(index: number, seed: number): number {
+        return (
+            Math.abs(Math.sin(index * 12.9898 + seed * 78.233) * 43758.5453) % 1
+        );
+    }
+
+    private randomSigned(index: number, seed: number): number {
+        return this.random(index, seed) * 2 - 1;
     }
 
     private addIslandProps(group: THREE.Group, island: IslandConfig): void {
