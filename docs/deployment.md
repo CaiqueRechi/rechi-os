@@ -1,18 +1,27 @@
 # Deployment
 
-O provedor final ainda nao foi definido. O workflow `.github/workflows/deploy.yml` e `scripts/deploy.sh` sao placeholders seguros.
+O deploy atual usa Hostinger via FTP. A configuracao e os limites do fluxo estao
+em [hostinger-deploy.md](hostinger-deploy.md).
 
 ## Secrets esperados
 
-- `DEPLOY_HOST`
-- `DEPLOY_USER`
-- `DEPLOY_PATH`
-- Secrets reais do app no GitHub Environment `production`
+- `FTP_SERVER`
+- `FTP_USERNAME`
+- `FTP_PASSWORD`
+- `FTP_SERVER_DIR` (com `/` no final)
+- Configurados no GitHub Environment `production` ou nos secrets do repositorio.
 
-## Fluxo esperado
+## Fluxo atual
+
+1. CI passa em um push na branch `main`.
+2. Deploy verifica o SHA aprovado e a configuracao FTP.
+3. Composer instala dependencias de producao e npm compila no GitHub Actions.
+4. FTP envia dependencias, aplicacao e arquivos publicos compilados.
+
+## Evolucao para deploy com SSH (ainda nao implementada)
 
 1. CI passa na branch `main`.
-2. Aprovacao manual no GitHub Environment.
+2. Respeitar as regras de aprovacao configuradas no GitHub Environment.
 3. Backup ou verificacao previa.
 4. Dependencias de producao.
 5. Build.
