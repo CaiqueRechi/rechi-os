@@ -24,8 +24,11 @@ jobs:
        github.event.workflow_run.event == 'push' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     environment: production
+
+    env:
+      SSH_PORT: "65002"
 
     steps:
       - name: Verify successful CI for the current main commit
@@ -45,26 +48,21 @@ jobs:
             exit 1
           fi
 
-      - name: Validate FTP configuration
+      - name: Validate Hostinger SSH configuration
         env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-          FTP_SERVER_DIR: ${{ secrets.FTP_SERVER_DIR }}
+          SSH_HOST: ${{ secrets.FTP_SERVER }}
+          SSH_USERNAME: ${{ secrets.FTP_USERNAME }}
+          SSH_PASSWORD: ${{ secrets.FTP_PASSWORD }}
         run: |
           set -euo pipefail
           missing=0
-          for name in FTP_SERVER FTP_USERNAME FTP_PASSWORD FTP_SERVER_DIR; do
+          for name in SSH_HOST SSH_USERNAME SSH_PASSWORD; do
             if [[ -z "${!name}" ]]; then
-              echo "::error::Missing $name. Configure this secret in the production environment or repository Actions secrets."
+              echo "::error::Missing $name. The Hostinger SSH deploy reuses FTP_SERVER, FTP_USERNAME and FTP_PASSWORD."
               missing=1
             fi
           done
           if [[ "$missing" == 1 ]]; then exit 1; fi
-          if [[ "$FTP_SERVER_DIR" != */ ]]; then
-            echo "::error::FTP_SERVER_DIR must end with / because vendor/ is appended to it."
-            exit 1
-          fi
 
       - name: Checkout
         uses: actions/checkout@v7
@@ -84,67 +82,121 @@ jobs:
           node-version: "24"
           cache: npm
 
-      - name: Install Dependencies
+      - name: Install production dependencies
         run: |
+          set -euo pipefail
           composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
           npm ci
 
-      - name: Build
+      - name: Build frontend
         run: npm run build
 
-      - name: Prepare public document root
+      - name: Prepare release archive
         run: |
-          mkdir -p .deploy-public
-          cp -a public/. .deploy-public/
-          sed -i "s#__DIR__.'/../vendor/autoload.php'#__DIR__.'/vendor/autoload.php'#" .deploy-public/index.php
-          sed -i "s#__DIR__.'/../bootstrap/app.php'#__DIR__.'/bootstrap/app.php'#" .deploy-public/index.php
-          sed -i "s#__DIR__.'/../storage/framework/maintenance.php'#__DIR__.'/storage/framework/maintenance.php'#" .deploy-public/index.php
+          set -euo pipefail
+          rm -rf .deploy
+          mkdir -p .deploy/release
 
-      - name: Deploy PHP dependencies by FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: vendor/
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}vendor/
-          state-name: .ftp-deploy-vendor-state.json
+          rsync -a ./ .deploy/release/ \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.agent/' \
+            --exclude='.agents/' \
+            --exclude='.codex/' \
+            --exclude='.codex-git/' \
+            --exclude='.npm-cache/' \
+            --exclude='.deploy/' \
+            --exclude='node_modules/' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='database/*.sqlite' \
+            --exclude='storage/' \
+            --exclude='public/storage' \
+            --exclude='public/hot' \
+            --exclude='bootstrap/cache/*'
 
-      - name: Deploy application by FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          state-name: .ftp-deploy-app-state.json
-          exclude: |
-            **/.git*
-            **/.git*/**
-            **/.github/**
-            **/.agent/**
-            **/.agents/**
-            **/.codex/**
-            **/.codex-git/**
-            **/.npm-cache/**
-            **/.deploy/**
-            **/.deploy-public/**
-            **/node_modules/**
-            **/vendor/**
-            .env
-            .env.*
-            public/hot
-            database/*.sqlite
-            storage/**
-            public/storage/**
-            bootstrap/cache/**
+          # Hostinger serves the domain directly from public_html, so mirror
+          # Laravel's public directory into the deployment root.
+          cp -a public/. .deploy/release/
+          rm -f .deploy/release/hot
 
-      - name: Deploy public document root by FTP
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: .deploy-public/
-          server-dir: ${{ secrets.FTP_SERVER_DIR }}
-          state-name: .ftp-deploy-public-state.json
+          sed -i "s#__DIR__.'/../vendor/autoload.php'#__DIR__.'/vendor/autoload.php'#" .deploy/release/index.php
+          sed -i "s#__DIR__.'/../bootstrap/app.php'#__DIR__.'/bootstrap/app.php'#" .deploy/release/index.php
+          sed -i "s#__DIR__.'/../storage/framework/maintenance.php'#__DIR__.'/storage/framework/maintenance.php'#" .deploy/release/index.php
+
+          tar -C .deploy/release -czf .deploy/rechi-os-release.tar.gz .
+
+      - name: Configure SSH client
+        env:
+          SSH_HOST: ${{ secrets.FTP_SERVER }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y sshpass
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Upload release by SCP
+        env:
+          SSH_HOST: ${{ secrets.FTP_SERVER }}
+          SSH_USERNAME: ${{ secrets.FTP_USERNAME }}
+          SSHPASS: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          scp_target="/home/$SSH_USERNAME/rechi-os-release.tar.gz"
+          sshpass -e scp -P "$SSH_PORT" .deploy/rechi-os-release.tar.gz "$SSH_USERNAME@$SSH_HOST:$scp_target"
+
+      - name: Activate release over SSH
+        env:
+          SSH_HOST: ${{ secrets.FTP_SERVER }}
+          SSH_USERNAME: ${{ secrets.FTP_USERNAME }}
+          SSHPASS: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          deploy_path="/home/$SSH_USERNAME/domains/rechi.net.br/public_html"
+          archive_path="/home/$SSH_USERNAME/rechi-os-release.tar.gz"
+
+          sshpass -e ssh -p "$SSH_PORT" "$SSH_USERNAME@$SSH_HOST" \
+            "DEPLOY_PATH='$deploy_path' ARCHIVE_PATH='$archive_path' bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          if [[ ! -f "$ARCHIVE_PATH" ]]; then
+            echo "Release archive not found: $ARCHIVE_PATH" >&2
+            exit 1
+          fi
+
+          mkdir -p "$DEPLOY_PATH"
+          cd "$DEPLOY_PATH"
+
+          restore_app() {
+            if [[ -f artisan ]]; then
+              php artisan up >/dev/null 2>&1 || true
+            fi
+          }
+          trap restore_app EXIT
+
+          if [[ -f artisan ]]; then
+            php artisan down --retry=60 || true
+          fi
+
+          tar -xzf "$ARCHIVE_PATH" -C "$DEPLOY_PATH"
+          rm -f "$ARCHIVE_PATH"
+
+          mkdir -p \
+            storage/framework/cache/data \
+            storage/framework/sessions \
+            storage/framework/views \
+            storage/logs \
+            bootstrap/cache
+
+          chmod -R ug+rwX storage bootstrap/cache || true
+
+          php artisan migrate --force
+          php artisan optimize
+          php artisan storage:link || true
+
+          php artisan up
+          trap - EXIT
+          REMOTE
