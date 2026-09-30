@@ -285,30 +285,43 @@ class GamePlannerBuilder
     {
         $methods = [];
         foreach ($this->catalogDatabase()->table('drops')->whereNotNull('item_id')
-            ->get(['item_id', 'npc_id', 'source_item_id', 'source_type', 'condition_text', 'conditions_json']) as $drop) {
+            ->get([
+                'item_id', 'npc_id', 'source_item_id', 'unresolved_source_name', 'source_type',
+                'condition_text', 'conditions_json',
+            ]) as $drop) {
             $row = (array) $drop;
             $rank = 0;
+            $confidence = 'derived';
             $npcId = $row['npc_id'] === null ? null : (int) $row['npc_id'];
+            $sourceItemId = $row['source_item_id'] === null ? null : (int) $row['source_item_id'];
             if ($npcId !== null && isset($bosses[$npcId])) {
                 $rank = $bosses[$npcId]['rank'];
             } else {
-                $condition = strtolower((string) ($row['condition_text'] ?? '').' '.(string) ($row['conditions_json'] ?? ''));
+                $condition = strtolower(
+                    (string) ($row['unresolved_source_name'] ?? '').' '.
+                    (string) ($row['condition_text'] ?? '').' '.
+                    (string) ($row['conditions_json'] ?? '')
+                );
                 if (str_contains($condition, 'moon lord')) {
                     $rank = 2000;
                 } elseif (str_contains($condition, 'hardmode')) {
                     $rank = 1000;
                 }
                 foreach ($bosses as $boss) {
-                    if (str_contains($condition, strtolower($boss['name']))) {
+                    if ($this->conditionMentionsBoss($condition, $boss['name'])) {
                         $rank = max($rank, $boss['rank']);
                     }
+                }
+                if ($npcId === null && $sourceItemId === null
+                    && trim((string) ($row['unresolved_source_name'] ?? '')) !== '' && $rank === 0) {
+                    $confidence = 'unknown';
                 }
             }
             $methods[(int) $row['item_id']][] = [
                 'rank' => $rank,
                 'type' => (string) $row['source_type'],
-                'confidence' => 'derived',
-                'source_item_id' => $row['source_item_id'] === null ? null : (int) $row['source_item_id'],
+                'confidence' => $confidence,
+                'source_item_id' => $sourceItemId,
             ];
         }
 
@@ -385,6 +398,9 @@ class GamePlannerBuilder
             foreach ($items as $itemId => $item) {
                 $methods = [];
                 foreach ($dropMethods[$itemId] ?? [] as $dropMethod) {
+                    if ($dropMethod['confidence'] === 'unknown') {
+                        continue;
+                    }
                     $sourceItemId = $dropMethod['source_item_id'];
                     if ($sourceItemId !== null) {
                         if (! isset($availability[$sourceItemId]) || $availability[$sourceItemId]['confidence'] === 'unknown') {
@@ -443,6 +459,27 @@ class GamePlannerBuilder
         }
 
         return $availability;
+    }
+
+    private function conditionMentionsBoss(string $condition, string $bossName): bool
+    {
+        $normalizedName = strtolower($bossName);
+        if (str_contains($condition, $normalizedName)) {
+            return true;
+        }
+
+        $stopWords = ['body', 'head', 'tail', 'left', 'right', 'the', 'of'];
+        $tokens = preg_split('/[^a-z0-9]+/', $normalizedName) ?: [];
+        foreach ($tokens as $token) {
+            if (strlen($token) < 4 || in_array($token, $stopWords, true)) {
+                continue;
+            }
+            if (preg_match('/\b'.preg_quote($token, '/').'\b/', $condition) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
