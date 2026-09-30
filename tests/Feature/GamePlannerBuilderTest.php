@@ -76,6 +76,8 @@ class GamePlannerBuilderTest extends TestCase
         }
 
         $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
+        $firstStepId = DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->orderBy('sort_order')->value('id');
+        $this->assertSame(5, DB::table('game_planner_step_items')->where('step_id', $firstStepId)->where('slot_type', 'accessory')->count());
         $this->assertSame(3, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
     }
 
@@ -221,6 +223,10 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 13, 'mod_id' => 1, 'global_id' => 'terraria:wood_breastplate', 'display_name' => 'Wood Breastplate', 'tooltip' => null],
             ['id' => 14, 'mod_id' => 1, 'global_id' => 'terraria:wood_greaves', 'display_name' => 'Wood Greaves', 'tooltip' => null],
             ['id' => 15, 'mod_id' => 1, 'global_id' => 'terraria:running_charm', 'display_name' => 'Running Charm', 'tooltip' => '5% increased movement speed'],
+            ['id' => 16, 'mod_id' => 1, 'global_id' => 'terraria:lucky_charm', 'display_name' => 'Lucky Charm', 'tooltip' => '4% increased critical strike chance'],
+            ['id' => 17, 'mod_id' => 1, 'global_id' => 'terraria:warding_charm', 'display_name' => 'Warding Charm', 'tooltip' => '3% damage reduction'],
+            ['id' => 18, 'mod_id' => 1, 'global_id' => 'terraria:swift_charm', 'display_name' => 'Swift Charm', 'tooltip' => '2% increased movement speed'],
+            ['id' => 19, 'mod_id' => 1, 'global_id' => 'terraria:minor_charm', 'display_name' => 'Minor Charm', 'tooltip' => '1% increased damage'],
         ]);
         DB::table('combat_classes')->insert(['id' => 1, 'class_key' => 'melee']);
         DB::table('item_combat_classes')->insert(array_map(
@@ -249,6 +255,10 @@ class GamePlannerBuilderTest extends TestCase
             ['item_id' => 13, 'category_id' => 1],
             ['item_id' => 14, 'category_id' => 1],
             ['item_id' => 15, 'category_id' => 2],
+            ['item_id' => 16, 'category_id' => 2],
+            ['item_id' => 17, 'category_id' => 2],
+            ['item_id' => 18, 'category_id' => 2],
+            ['item_id' => 19, 'category_id' => 2],
         ]);
         DB::table('item_properties')->insert([
             ['item_id' => 12, 'property_key' => 'bodyslot', 'text_value' => 'helmet'],
@@ -276,6 +286,10 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 10, 'item_id' => 13, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
             ['id' => 11, 'item_id' => 14, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
             ['id' => 12, 'item_id' => 15, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 13, 'item_id' => 16, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 14, 'item_id' => 17, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 15, 'item_id' => 18, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 16, 'item_id' => 19, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
         ]);
         DB::table('recipes')->insert([
             ['id' => 1, 'result_item_id' => 3, 'is_historical' => false, 'raw_json' => null],
