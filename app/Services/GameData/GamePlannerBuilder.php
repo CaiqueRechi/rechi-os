@@ -740,6 +740,8 @@ class GamePlannerBuilder
         $classKeys = $this->stringList($metadata['combat_class_keys'] ?? []);
         $categoryKeys = $this->stringList($metadata['category_keys'] ?? []);
         $propertyKeys = $this->stringList($metadata['property_keys'] ?? []);
+        $nameKeywords = $this->stringList($metadata['name_keywords'] ?? []);
+        $tooltipKeywords = $this->stringList($metadata['tooltip_keywords'] ?? []);
         $keyword = strtolower((string) ($archetype['damage_class_key'] ?? $archetype['name'] ?? ''));
         $candidates = [];
 
@@ -748,13 +750,16 @@ class GamePlannerBuilder
             if ($role === null) {
                 continue;
             }
+            $name = strtolower((string) ($item['display_name'] ?? ''));
+            $tooltip = strtolower((string) ($item['tooltip'] ?? '').' '.(string) ($item['description'] ?? ''));
             $matchesArchetype = array_intersect($classKeys, $item['classes']) !== []
                 || array_intersect($categoryKeys, $item['categories']) !== []
                 || array_intersect($propertyKeys, array_keys(array_filter(
                     $item['properties'],
                     static fn (mixed $value): bool => (bool) $value
-                ))) !== [];
-            $tooltip = strtolower((string) ($item['tooltip'] ?? '').' '.(string) ($item['description'] ?? ''));
+                ))) !== []
+                || $this->containsAny($name, $nameKeywords)
+                || $this->containsAny($tooltip, $tooltipKeywords);
             $supportsClass = $role !== 'weapon' && $this->supportsClass($tooltip, $keyword);
             $isEquipment = $role !== 'weapon';
             $belongsToAnotherClass = $isEquipment && $item['classes'] !== [] && ! $matchesArchetype;
@@ -785,6 +790,18 @@ class GamePlannerBuilder
         usort($candidates, static fn (array $left, array $right): int => $left['rank'] <=> $right['rank'] ?: $right['score'] <=> $left['score']);
 
         return $candidates;
+    }
+
+    /** @param list<string> $needles */
+    private function containsAny(string $value, array $needles): bool
+    {
+        foreach ($needles as $needle) {
+            if ($needle !== '' && str_contains($value, strtolower($needle))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** @param array<string, mixed> $item */

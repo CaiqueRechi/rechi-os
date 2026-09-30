@@ -74,6 +74,14 @@ class GamePlannerBuilderTest extends TestCase
                 'slot_type' => $slotType,
             ]);
         }
+        $this->assertDatabaseHas('game_planner_step_items', [
+            'item_global_id' => 'terraria:test_flamethrower',
+            'slot_type' => 'weapon',
+        ]);
+        $this->assertDatabaseHas('game_planner_step_items', [
+            'item_global_id' => 'terraria:test_spellbook',
+            'slot_type' => 'weapon',
+        ]);
 
         $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
         $firstStepId = DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->orderBy('sort_order')->value('id');
@@ -227,12 +235,22 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 17, 'mod_id' => 1, 'global_id' => 'terraria:warding_charm', 'display_name' => 'Warding Charm', 'tooltip' => '3% damage reduction'],
             ['id' => 18, 'mod_id' => 1, 'global_id' => 'terraria:swift_charm', 'display_name' => 'Swift Charm', 'tooltip' => '2% increased movement speed'],
             ['id' => 19, 'mod_id' => 1, 'global_id' => 'terraria:minor_charm', 'display_name' => 'Minor Charm', 'tooltip' => '1% increased damage'],
+            ['id' => 20, 'mod_id' => 1, 'global_id' => 'terraria:test_flamethrower', 'display_name' => 'Test Flamethrower', 'tooltip' => 'Uses gel for ammo'],
+            ['id' => 21, 'mod_id' => 1, 'global_id' => 'terraria:test_spellbook', 'display_name' => 'Test Spellbook', 'tooltip' => 'Casts a test spell'],
         ]);
-        DB::table('combat_classes')->insert(['id' => 1, 'class_key' => 'melee']);
+        DB::table('combat_classes')->insert([
+            ['id' => 1, 'class_key' => 'melee'],
+            ['id' => 2, 'class_key' => 'ranged'],
+            ['id' => 3, 'class_key' => 'magic'],
+        ]);
         DB::table('item_combat_classes')->insert(array_map(
             static fn (int $itemId): array => ['item_id' => $itemId, 'combat_class_id' => 1],
             [1, 2, 3, 5, 7, 8, 9, 10, 11]
         ));
+        DB::table('item_combat_classes')->insert([
+            ['item_id' => 20, 'combat_class_id' => 2],
+            ['item_id' => 21, 'combat_class_id' => 3],
+        ]);
         foreach ([[1, 10, 30], [2, 20, 25], [3, 40, 20], [5, 100, 10], [7, 80, 15], [8, 90, 15], [9, 120, 12], [10, 1000, 5], [11, 150, 10]] as [$itemId, $damage, $useTime]) {
             DB::table('item_stats')->insert([
                 ['item_id' => $itemId, 'stat_key' => 'damage', 'numeric_value' => $damage],
@@ -246,9 +264,16 @@ class GamePlannerBuilderTest extends TestCase
                 'numeric_value' => $defense,
             ]);
         }
+        foreach ([[20, 35, 30], [21, 28, 24]] as [$itemId, $damage, $useTime]) {
+            DB::table('item_stats')->insert([
+                ['item_id' => $itemId, 'stat_key' => 'damage', 'numeric_value' => $damage],
+                ['item_id' => $itemId, 'stat_key' => 'use_time', 'numeric_value' => $useTime],
+            ]);
+        }
         DB::table('categories')->insert([
             ['id' => 1, 'category_key' => 'armor'],
             ['id' => 2, 'category_key' => 'accessory'],
+            ['id' => 3, 'category_key' => 'spell_books'],
         ]);
         DB::table('item_categories')->insert([
             ['item_id' => 12, 'category_id' => 1],
@@ -259,6 +284,7 @@ class GamePlannerBuilderTest extends TestCase
             ['item_id' => 17, 'category_id' => 2],
             ['item_id' => 18, 'category_id' => 2],
             ['item_id' => 19, 'category_id' => 2],
+            ['item_id' => 21, 'category_id' => 3],
         ]);
         DB::table('item_properties')->insert([
             ['item_id' => 12, 'property_key' => 'bodyslot', 'text_value' => 'helmet'],
@@ -290,6 +316,8 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 14, 'item_id' => 17, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
             ['id' => 15, 'item_id' => 18, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
             ['id' => 16, 'item_id' => 19, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 17, 'item_id' => 20, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 18, 'item_id' => 21, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
         ]);
         DB::table('recipes')->insert([
             ['id' => 1, 'result_item_id' => 3, 'is_historical' => false, 'raw_json' => null],
