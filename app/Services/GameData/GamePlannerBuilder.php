@@ -13,6 +13,8 @@ class GamePlannerBuilder
 
     private const MAX_PROGRESS_RANK = 3000;
 
+    private const ACCESSORY_SLOT_COUNT = 5;
+
     /** @return array<string, int|string> */
     public function build(string $trackKey): array
     {
@@ -940,6 +942,10 @@ class GamePlannerBuilder
             }
             unset($roleCandidates);
 
+            if (! $this->hasCompleteLoadout($byRole)) {
+                continue;
+            }
+
             $hasMeaningfulChange = $milestoneIndex === 0;
             foreach ($byRole as $role => $roleCandidates) {
                 if ($roleCandidates === []) {
@@ -999,6 +1005,18 @@ class GamePlannerBuilder
         }
 
         return $recommendationCount;
+    }
+
+    /** @param array<string, list<array<string, mixed>>> $byRole */
+    private function hasCompleteLoadout(array $byRole): bool
+    {
+        foreach (['weapon', 'armor_head', 'armor_body', 'armor_legs'] as $role) {
+            if (($byRole[$role] ?? []) === []) {
+                return false;
+            }
+        }
+
+        return count($byRole['accessory'] ?? []) >= self::ACCESSORY_SLOT_COUNT;
     }
 
     /**
