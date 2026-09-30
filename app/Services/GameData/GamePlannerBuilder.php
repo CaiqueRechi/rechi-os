@@ -9,7 +9,7 @@ use RuntimeException;
 
 class GamePlannerBuilder
 {
-    private const ALGORITHM_VERSION = 'availability-power-v3';
+    private const ALGORITHM_VERSION = 'availability-power-v4';
 
     private const MAX_PROGRESS_RANK = 3000;
 
@@ -283,7 +283,24 @@ class GamePlannerBuilder
         sort($dropPowerScores, SORT_NUMERIC);
         $combatCount = count($combatScores);
         $dropPowerCount = count($dropPowerScores);
+        $wallOfFleshScore = null;
+        $moonLordScore = null;
+        foreach ($bosses as $boss) {
+            $normalizedName = strtolower($boss['name']);
+            if (str_contains($normalizedName, 'wall of flesh')) {
+                $wallOfFleshScore = $boss['score'];
+            }
+            if ($normalizedName === 'moon lord') {
+                $moonLordScore = $boss['score'];
+            }
+        }
         foreach ($bosses as $npcId => &$boss) {
+            $anchoredRank = $this->phaseAnchoredBossRank(
+                $boss['score'],
+                $combatScores,
+                $wallOfFleshScore,
+                $moonLordScore
+            );
             $combatPosition = $this->lowerBound($combatScores, $boss['score']);
             $combatPercentile = $combatCount <= 1 ? 0.0 : $combatPosition / ($combatCount - 1);
             $dropPercentile = 0.0;
@@ -292,14 +309,68 @@ class GamePlannerBuilder
                 $dropPercentile = $dropPowerCount <= 1 ? 0.0 : $dropPosition / ($dropPowerCount - 1);
             }
             $percentile = max($combatPercentile, $dropPercentile);
-            $boss['rank'] = max(
-                $bossFloorRanks[$npcId] ?? 0,
-                100 + (int) round($percentile * (self::MAX_PROGRESS_RANK - 100))
-            );
+            $fallbackRank = 100 + (int) round($percentile * (self::MAX_PROGRESS_RANK - 100));
+            $boss['rank'] = max($bossFloorRanks[$npcId] ?? 0, $anchoredRank ?? $fallbackRank);
         }
         unset($boss);
 
         return $bosses;
+    }
+
+    /** @param list<float> $combatScores */
+    private function phaseAnchoredBossRank(
+        float $score,
+        array $combatScores,
+        ?float $wallOfFleshScore,
+        ?float $moonLordScore
+    ): ?int {
+        if ($wallOfFleshScore === null || $moonLordScore === null || $wallOfFleshScore >= $moonLordScore) {
+            return null;
+        }
+
+        if ($score <= $wallOfFleshScore) {
+            $phaseScores = array_values(array_filter(
+                $combatScores,
+                static fn (float $candidate): bool => $candidate <= $wallOfFleshScore
+            ));
+
+            return $this->rankWithinPhase($score, $phaseScores, 100, 1000, true);
+        }
+        if ($score <= $moonLordScore) {
+            $phaseScores = array_values(array_filter(
+                $combatScores,
+                static fn (float $candidate): bool => $candidate > $wallOfFleshScore && $candidate <= $moonLordScore
+            ));
+
+            return $this->rankWithinPhase($score, $phaseScores, 1000, 2000, false);
+        }
+        $phaseScores = array_values(array_filter(
+            $combatScores,
+            static fn (float $candidate): bool => $candidate > $moonLordScore
+        ));
+
+        return $this->rankWithinPhase($score, $phaseScores, 2000, self::MAX_PROGRESS_RANK, false);
+    }
+
+    /** @param list<float> $phaseScores */
+    private function rankWithinPhase(
+        float $score,
+        array $phaseScores,
+        int $minimum,
+        int $maximum,
+        bool $includeMinimum
+    ): int {
+        sort($phaseScores, SORT_NUMERIC);
+        $count = count($phaseScores);
+        if ($count === 0) {
+            return $maximum;
+        }
+        $position = min($this->lowerBound($phaseScores, $score), $count - 1);
+        $percentile = $includeMinimum && $count > 1
+            ? $position / ($count - 1)
+            : ($position + 1) / $count;
+
+        return $minimum + (int) round($percentile * ($maximum - $minimum));
     }
 
     /**
@@ -475,10 +546,12 @@ class GamePlannerBuilder
         foreach ($items as $itemId => $item) {
             $floor = (int) $item['floor_rank'];
             $isDeclared = (bool) $item['has_declared_availability'] || $floor > 0;
+            $hasConcreteMethod = ($dropMethods[$itemId] ?? []) !== [] || ($recipes[$itemId] ?? []) !== [];
+            $isVendorItem = $this->isVendorItem($item);
             $availability[$itemId] = [
                 'rank' => $floor,
-                'type' => $isDeclared ? 'game_state' : 'unknown',
-                'confidence' => $isDeclared ? 'declared' : 'unknown',
+                'type' => $isVendorItem ? 'vendor' : ($isDeclared && ! $hasConcreteMethod ? 'game_state' : 'unknown'),
+                'confidence' => $isVendorItem ? 'derived' : ($isDeclared && ! $hasConcreteMethod ? 'declared' : 'unknown'),
             ];
         }
 
@@ -548,6 +621,20 @@ class GamePlannerBuilder
         }
 
         return $availability;
+    }
+
+    /** @param array<string, mixed> $item */
+    private function isVendorItem(array $item): bool
+    {
+        foreach ($item['tags'] as $tag) {
+            if ($tag === 'vendor' || str_starts_with($tag, 'vendor:')) {
+                return true;
+            }
+        }
+
+        $raw = (string) ($item['raw_json'] ?? '');
+
+        return preg_match('/"buy"\s*:\s*"(?!")/', $raw) === 1;
     }
 
     private function conditionMentionsBoss(string $condition, string $bossName): bool

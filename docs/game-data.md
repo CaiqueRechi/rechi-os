@@ -40,11 +40,14 @@ Terraria icons are resolved through the official Terraria Wiki API:
 php artisan storage:link
 php artisan game-data:import-icons --mod=calamity --calamity-repository=/path/to/CalamityModPublic
 php artisan game-data:import-icons --mod=terraria
+php artisan game-data:repair-icon-metadata
 ```
 
 The importer is idempotent: ready files are skipped unless `--force` is passed.
 Use `--limit` for a smoke test and `--dry-run` to verify source availability
-without writing files or metadata.
+without writing files or metadata. The metadata repair command reads the official
+Calamity item sources and records vertical animation frame sizes so sprite sheets
+render as a single inventory icon.
 
 ## Generated timelines
 
@@ -60,15 +63,16 @@ php artisan migrate --force
 php artisan game-data:build-planners
 ```
 
-The `availability-power-v3` engine builds the timeline from catalog facts:
+The `availability-power-v4` engine builds the timeline from catalog facts:
 
 1. It establishes acquisition anchors from drops, explicit game-state flags and
    declared progression constraints.
 2. It resolves recipe dependencies to a fixed point. A crafted item becomes
    available only when every ingredient has at least one available alternative;
    unresolved recipes do not create false availability.
-3. It estimates boss gates from objective NPC combat statistics, while respecting
-   explicit Hardmode and post-Moon Lord floors found in item data.
+3. It estimates boss gates from objective NPC combat statistics, anchored to the
+   Wall of Flesh and Moon Lord phase boundaries, while respecting explicit
+   Hardmode and post-Moon Lord floors found in item data.
 4. It creates milestone boundaries from the distribution of actually obtainable
    weapons instead of loading a predefined boss order.
 5. It classifies weapons, armor and accessories for each class/subclass, computes

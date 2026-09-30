@@ -89,9 +89,20 @@ class GameIconImporter
                     continue;
                 }
                 if (! $dryRun) {
-                    $this->store($globalId, $bytes, 'calamity_repository', $sourceUrl, [
+                    $metadata = [
                         'source_file' => $sourceFile,
-                    ]);
+                    ];
+                    $sourceCodePath = $repository !== null && $sourceFile !== ''
+                        ? $repository.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $sourceFile)
+                        : null;
+                    if ($sourceCodePath !== null && is_file($sourceCodePath)) {
+                        $sourceCode = file_get_contents($sourceCodePath);
+                        $frameCount = is_string($sourceCode) ? $this->animationFrameCount($sourceCode) : null;
+                        if ($frameCount !== null) {
+                            $metadata['frame_count'] = $frameCount;
+                        }
+                    }
+                    $this->store($globalId, $bytes, 'calamity_repository', $sourceUrl, $metadata);
                 }
                 $result['imported']++;
             } catch (Throwable $exception) {
@@ -214,6 +225,10 @@ class GameIconImporter
         if ($image === false || $extension === null) {
             throw new RuntimeException("Invalid image asset for {$globalId}.");
         }
+        $frameCount = (int) ($metadata['frame_count'] ?? 0);
+        if ($frameCount > 1 && (int) $image[1] % $frameCount === 0) {
+            $metadata['frame_height'] = intdiv((int) $image[1], $frameCount);
+        }
         $disk = (string) config('game-data.icons.disk', 'public');
         $prefix = trim((string) config('game-data.icons.prefix', 'game-data/items'), '/');
         [$namespace, $key] = array_pad(explode(':', $globalId, 2), 2, 'unknown');
@@ -264,6 +279,107 @@ class GameIconImporter
         $row = (array) $asset;
 
         return Storage::disk((string) $row['disk'])->exists((string) $row['path']);
+    }
+
+    /** @return array<string, int> */
+    public function repairAnimationMetadata(int $limit = 0): array
+    {
+        $result = ['examined' => 0, 'updated' => 0, 'skipped' => 0, 'failed' => 0];
+        $query = DB::table('game_item_assets as asset')
+            ->join('items as item', 'item.global_id', '=', 'asset.item_global_id')
+            ->join('mods as mod', 'mod.id', '=', 'item.mod_id')
+            ->where('mod.mod_key', 'calamity')
+            ->where('asset.asset_type', 'icon')
+            ->where('asset.variant', 'default')
+            ->where('asset.status', 'ready')
+            ->whereRaw('asset.height > asset.width * 1.5')
+            ->orderBy('asset.id')
+            ->get([
+                'asset.id', 'asset.item_global_id', 'asset.height', 'asset.metadata_json', 'item.raw_json',
+            ]);
+        if ($limit > 0) {
+            $query = $query->take($limit);
+        }
+
+        $baseUrl = rtrim((string) config('game-data.icons.calamity_raw_base_url'), '/');
+        foreach ($query->chunk(50) as $batch) {
+            $sources = [];
+            foreach ($batch as $asset) {
+                $row = (array) $asset;
+                $raw = is_string($row['raw_json']) ? json_decode($row['raw_json'], true) : [];
+                $sourceFile = is_array($raw) ? (string) ($raw['source_file'] ?? '') : '';
+                if ($sourceFile === '') {
+                    $result['examined']++;
+                    $result['skipped']++;
+
+                    continue;
+                }
+                $sources[(string) $row['item_global_id']] = $baseUrl.'/'.ltrim(str_replace('\\', '/', $sourceFile), '/');
+            }
+            $responses = Http::pool(function (Pool $pool) use ($sources): array {
+                $requests = [];
+                foreach ($sources as $globalId => $url) {
+                    $requests[] = $pool->as($globalId)->withUserAgent('rechi-os-game-data/1.0')
+                        ->timeout(20)->get($url);
+                }
+
+                return $requests;
+            });
+
+            foreach ($batch as $asset) {
+                $row = (array) $asset;
+                $globalId = (string) $row['item_global_id'];
+                if (! isset($sources[$globalId])) {
+                    continue;
+                }
+                $result['examined']++;
+                $response = $responses[$globalId] ?? null;
+                if (! $response instanceof Response) {
+                    $result['failed']++;
+
+                    continue;
+                }
+                if (! $response->successful()) {
+                    $result['skipped']++;
+
+                    continue;
+                }
+                $frameCount = $this->animationFrameCount($response->body());
+                if ($frameCount === null) {
+                    $result['skipped']++;
+
+                    continue;
+                }
+                $height = (int) $row['height'];
+                if ($frameCount < 2 || $height % $frameCount !== 0) {
+                    $result['skipped']++;
+
+                    continue;
+                }
+                $metadata = is_string($row['metadata_json']) ? json_decode($row['metadata_json'], true) : [];
+                $metadata = is_array($metadata) ? $metadata : [];
+                $metadata['frame_count'] = $frameCount;
+                $metadata['frame_height'] = intdiv($height, $frameCount);
+                DB::table('game_item_assets')->where('id', $row['id'])->update([
+                    'metadata_json' => json_encode($metadata, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
+                    'updated_at' => now(),
+                ]);
+                $result['updated']++;
+            }
+        }
+
+        return $result;
+    }
+
+    private function animationFrameCount(string $sourceCode): ?int
+    {
+        if (preg_match('/DrawAnimationVertical\s*\(\s*[^,]+,\s*(\d+)\s*\)/', $sourceCode, $matches) !== 1) {
+            return null;
+        }
+
+        $frameCount = (int) $matches[1];
+
+        return $frameCount > 1 ? $frameCount : null;
     }
 
     /**
