@@ -32,7 +32,7 @@ class GamePlannerBuilder
         $items = $this->loadItemFacts();
         $bosses = $this->loadBossRanks($items);
         $dropMethods = $this->loadDropMethods($bosses);
-        $recipes = $this->loadRecipes();
+        $recipes = $this->loadRecipes($bosses);
         $availability = $this->deriveAvailability($items, $dropMethods, $recipes);
         $milestones = $this->deriveMilestones($items, $availability, $tierCount);
         $archetypes = DB::table('game_build_archetypes')->where('game_key', (string) $trackData['game_key'])
@@ -105,7 +105,8 @@ class GamePlannerBuilder
         foreach ([
             'items', 'mods', 'item_stats', 'item_properties', 'categories', 'item_categories', 'combat_classes',
             'item_combat_classes', 'tags', 'item_tags', 'progression_stages', 'item_progression', 'recipes',
-            'recipe_ingredients', 'recipe_group_members', 'drops', 'npcs', 'npc_stats', 'bosses',
+            'recipe_ingredients', 'recipe_group_members', 'recipe_stations', 'recipe_conditions',
+            'crafting_stations', 'drops', 'npcs', 'npc_stats', 'bosses',
         ] as $table) {
             if (! $catalogSchema->hasTable($table)) {
                 throw new RuntimeException("The catalog table {$table} is not installed.");
@@ -238,15 +239,38 @@ class GamePlannerBuilder
 
         $bossFloorRanks = [];
         $bossDropPower = [];
-        foreach ($db->table('drops')->whereNotNull('npc_id')->whereNotNull('item_id')->get(['npc_id', 'item_id']) as $drop) {
+        foreach ($db->table('drops')->whereNotNull('item_id')->get([
+            'npc_id', 'item_id', 'unresolved_source_name', 'condition_text', 'conditions_json',
+        ]) as $drop) {
             $row = (array) $drop;
-            $npcId = (int) $row['npc_id'];
             $itemId = (int) $row['item_id'];
-            if (isset($bosses[$npcId], $items[$itemId])) {
-                $bossFloorRanks[$npcId] = max($bossFloorRanks[$npcId] ?? 0, (int) $items[$itemId]['floor_rank']);
+            if (! isset($items[$itemId])) {
+                continue;
+            }
+            $matchedBossIds = [];
+            $npcId = $row['npc_id'] === null ? null : (int) $row['npc_id'];
+            if ($npcId !== null && isset($bosses[$npcId])) {
+                $matchedBossIds[] = $npcId;
+            } else {
+                $sourceText = strtolower(
+                    (string) ($row['unresolved_source_name'] ?? '').' '.
+                    (string) ($row['condition_text'] ?? '').' '.
+                    (string) ($row['conditions_json'] ?? '')
+                );
+                foreach ($bosses as $candidateNpcId => $boss) {
+                    if ($this->conditionMentionsBoss($sourceText, $boss['name'])) {
+                        $matchedBossIds[] = $candidateNpcId;
+                    }
+                }
+            }
+            foreach ($matchedBossIds as $matchedBossId) {
+                $bossFloorRanks[$matchedBossId] = max(
+                    $bossFloorRanks[$matchedBossId] ?? 0,
+                    (int) $items[$itemId]['floor_rank']
+                );
                 if ((float) ($items[$itemId]['stats']['damage'] ?? 0) > 0) {
-                    $bossDropPower[$npcId] = max(
-                        $bossDropPower[$npcId] ?? 0.0,
+                    $bossDropPower[$matchedBossId] = max(
+                        $bossDropPower[$matchedBossId] ?? 0.0,
                         $this->powerScore($items[$itemId], 'weapon', '')
                     );
                 }
@@ -296,26 +320,16 @@ class GamePlannerBuilder
             $sourceItemId = $row['source_item_id'] === null ? null : (int) $row['source_item_id'];
             if ($npcId !== null && isset($bosses[$npcId])) {
                 $rank = $bosses[$npcId]['rank'];
-            } else {
-                $condition = strtolower(
-                    (string) ($row['unresolved_source_name'] ?? '').' '.
-                    (string) ($row['condition_text'] ?? '').' '.
-                    (string) ($row['conditions_json'] ?? '')
-                );
-                if (str_contains($condition, 'moon lord')) {
-                    $rank = 2000;
-                } elseif (str_contains($condition, 'hardmode')) {
-                    $rank = 1000;
-                }
-                foreach ($bosses as $boss) {
-                    if ($this->conditionMentionsBoss($condition, $boss['name'])) {
-                        $rank = max($rank, $boss['rank']);
-                    }
-                }
-                if ($npcId === null && $sourceItemId === null
-                    && trim((string) ($row['unresolved_source_name'] ?? '')) !== '' && $rank === 0) {
-                    $confidence = 'unknown';
-                }
+            }
+            $condition = strtolower(
+                (string) ($row['unresolved_source_name'] ?? '').' '.
+                (string) ($row['condition_text'] ?? '').' '.
+                (string) ($row['conditions_json'] ?? '')
+            );
+            $rank = max($rank, $this->conditionFloorRank($condition, $bosses));
+            if ($npcId === null && $sourceItemId === null
+                && trim((string) ($row['unresolved_source_name'] ?? '')) !== '' && $rank === 0) {
+                $confidence = 'unknown';
             }
             $methods[(int) $row['item_id']][] = [
                 'rank' => $rank,
@@ -328,17 +342,22 @@ class GamePlannerBuilder
         return $methods;
     }
 
-    /** @return array<int, list<list<list<int>>>> */
-    private function loadRecipes(): array
+    /**
+     * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
+     * @return array<int, list<array{ingredients: list<list<int>>, floor_rank: int}>>
+     */
+    private function loadRecipes(array $bosses): array
     {
         $db = $this->catalogDatabase();
         $recipes = [];
         $rows = $db->table('recipes')->whereNotNull('result_item_id')->where('is_historical', false)
-            ->get(['id', 'result_item_id']);
+            ->get(['id', 'result_item_id', 'raw_json']);
         $recipeResults = [];
+        $recipeConstraints = [];
         foreach ($rows as $recipe) {
             $row = (array) $recipe;
             $recipeResults[(int) $row['id']] = (int) $row['result_item_id'];
+            $recipeConstraints[(int) $row['id']] = (string) ($row['raw_json'] ?? '');
         }
         $groupMembers = [];
         foreach ($db->table('recipe_group_members')->get(['recipe_group_id', 'item_id']) as $member) {
@@ -365,9 +384,27 @@ class GamePlannerBuilder
                 $invalidRecipes[$recipeId] = true;
             }
         }
+        foreach ($db->table('recipe_stations as rs')->join('crafting_stations as station', 'station.id', '=', 'rs.station_id')
+            ->whereIn('rs.recipe_id', array_keys($recipeResults))->get(['rs.recipe_id', 'station.name']) as $station) {
+            $row = (array) $station;
+            $recipeConstraints[(int) $row['recipe_id']] .= ' '.(string) $row['name'];
+        }
+        foreach ($db->table('recipe_conditions')->whereIn('recipe_id', array_keys($recipeResults))
+            ->get(['recipe_id', 'condition_type', 'condition_key', 'description', 'value_json']) as $condition) {
+            $row = (array) $condition;
+            $recipeConstraints[(int) $row['recipe_id']] .= ' '.implode(' ', array_filter([
+                $row['condition_type'], $row['condition_key'], $row['description'], $row['value_json'],
+            ], static fn (mixed $value): bool => is_scalar($value)));
+        }
         foreach ($recipeResults as $recipeId => $resultItemId) {
             if (! isset($invalidRecipes[$recipeId]) && ($ingredients[$recipeId] ?? []) !== []) {
-                $recipes[$resultItemId][] = $ingredients[$recipeId];
+                $recipes[$resultItemId][] = [
+                    'ingredients' => $ingredients[$recipeId],
+                    'floor_rank' => $this->conditionFloorRank(
+                        strtolower($recipeConstraints[$recipeId] ?? ''),
+                        $bosses
+                    ),
+                ];
             }
         }
 
@@ -377,7 +414,7 @@ class GamePlannerBuilder
     /**
      * @param  array<int, array<string, mixed>>  $items
      * @param  array<int, list<array{rank: int, type: string, confidence: string, source_item_id: int|null}>>  $dropMethods
-     * @param  array<int, list<list<list<int>>>>  $recipes
+     * @param  array<int, list<array{ingredients: list<list<int>>, floor_rank: int}>>  $recipes
      * @return array<int, array{rank: int, type: string, confidence: string}>
      */
     private function deriveAvailability(array $items, array $dropMethods, array $recipes): array
@@ -410,10 +447,10 @@ class GamePlannerBuilder
                     }
                     $methods[] = $dropMethod;
                 }
-                foreach ($recipes[$itemId] ?? [] as $recipeIngredients) {
+                foreach ($recipes[$itemId] ?? [] as $recipe) {
                     $ingredientRanks = [];
                     $known = true;
-                    foreach ($recipeIngredients as $alternatives) {
+                    foreach ($recipe['ingredients'] as $alternatives) {
                         $alternativeRanks = [];
                         foreach ($alternatives as $ingredientId) {
                             if (isset($availability[$ingredientId]) && $availability[$ingredientId]['confidence'] !== 'unknown') {
@@ -428,7 +465,7 @@ class GamePlannerBuilder
                     }
                     if ($known && $ingredientRanks !== []) {
                         $methods[] = [
-                            'rank' => max($ingredientRanks),
+                            'rank' => max($recipe['floor_rank'], max($ingredientRanks)),
                             'type' => 'crafting',
                             'confidence' => 'derived',
                             'source_item_id' => null,
@@ -480,6 +517,24 @@ class GamePlannerBuilder
         }
 
         return false;
+    }
+
+    /** @param array<int, array{rank: int, name: string, score: float}> $bosses */
+    private function conditionFloorRank(string $condition, array $bosses): int
+    {
+        $rank = 0;
+        if (str_contains($condition, 'moon lord')) {
+            $rank = 2000;
+        } elseif (str_contains($condition, 'hardmode')) {
+            $rank = 1000;
+        }
+        foreach ($bosses as $boss) {
+            if ($this->conditionMentionsBoss($condition, $boss['name'])) {
+                $rank = max($rank, $boss['rank']);
+            }
+        }
+
+        return $rank;
     }
 
     /**
