@@ -298,6 +298,11 @@ class GamePlannerBuilder
                 } elseif (str_contains($condition, 'hardmode')) {
                     $rank = 1000;
                 }
+                foreach ($bosses as $boss) {
+                    if (str_contains($condition, strtolower($boss['name']))) {
+                        $rank = max($rank, $boss['rank']);
+                    }
+                }
             }
             $methods[(int) $row['item_id']][] = [
                 'rank' => $rank,
