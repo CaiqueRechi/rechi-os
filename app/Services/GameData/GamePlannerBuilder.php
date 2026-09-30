@@ -31,7 +31,8 @@ class GamePlannerBuilder
 
         $items = $this->loadItemFacts();
         $bosses = $this->loadBossRanks($items);
-        $dropMethods = $this->loadDropMethods($bosses);
+        $npcRanks = $this->loadNpcRanks($bosses);
+        $dropMethods = $this->loadDropMethods($bosses, $npcRanks);
         $recipes = $this->loadRecipes($bosses);
         $availability = $this->deriveAvailability($items, $dropMethods, $recipes);
         $milestones = $this->deriveMilestones($items, $availability, $tierCount);
@@ -303,9 +304,58 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
+     * @return array<int, int>
+     */
+    private function loadNpcRanks(array $bosses): array
+    {
+        $bossScores = array_values(array_map(static fn (array $boss): float => $boss['score'], $bosses));
+        sort($bossScores, SORT_NUMERIC);
+        $bossCount = count($bossScores);
+        if ($bossCount === 0) {
+            return [];
+        }
+
+        $ranks = [];
+        $rows = $this->catalogDatabase()->table('npcs as n')
+            ->leftJoin('npc_stats as life', function ($join): void {
+                $join->on('life.npc_id', '=', 'n.id')->where('life.stat_key', 'life');
+            })->leftJoin('npc_stats as damage', function ($join): void {
+                $join->on('damage.npc_id', '=', 'n.id')->where('damage.stat_key', 'damage');
+            })->leftJoin('npc_stats as defense', function ($join): void {
+                $join->on('defense.npc_id', '=', 'n.id')->where('defense.stat_key', 'defense');
+            })->get([
+                'n.id', 'life.numeric_value as life', 'damage.numeric_value as damage',
+                'defense.numeric_value as defense',
+            ]);
+        foreach ($rows as $npc) {
+            $row = (array) $npc;
+            $npcId = (int) $row['id'];
+            if (isset($bosses[$npcId])) {
+                $ranks[$npcId] = $bosses[$npcId]['rank'];
+
+                continue;
+            }
+            $life = max(1.0, (float) ($row['life'] ?? 1));
+            $score = log10($life + 1) * 100 + (float) ($row['damage'] ?? 0) + (float) ($row['defense'] ?? 0) * 2;
+            $position = $this->lowerBound($bossScores, $score);
+            if ($position === 0 && $score < $bossScores[0]) {
+                $ranks[$npcId] = 0;
+
+                continue;
+            }
+            $percentile = $bossCount <= 1 ? 0.0 : min($position, $bossCount - 1) / ($bossCount - 1);
+            $ranks[$npcId] = 100 + (int) round($percentile * (self::MAX_PROGRESS_RANK - 100));
+        }
+
+        return $ranks;
+    }
+
+    /**
+     * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
+     * @param  array<int, int>  $npcRanks
      * @return array<int, list<array{rank: int, type: string, confidence: string, source_item_id: int|null}>>
      */
-    private function loadDropMethods(array $bosses): array
+    private function loadDropMethods(array $bosses, array $npcRanks): array
     {
         $methods = [];
         foreach ($this->catalogDatabase()->table('drops')->whereNotNull('item_id')
@@ -320,6 +370,8 @@ class GamePlannerBuilder
             $sourceItemId = $row['source_item_id'] === null ? null : (int) $row['source_item_id'];
             if ($npcId !== null && isset($bosses[$npcId])) {
                 $rank = $bosses[$npcId]['rank'];
+            } elseif ($npcId !== null) {
+                $rank = $npcRanks[$npcId] ?? 0;
             }
             $condition = strtolower(
                 (string) ($row['unresolved_source_name'] ?? '').' '.
