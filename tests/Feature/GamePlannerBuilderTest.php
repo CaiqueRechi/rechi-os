@@ -50,7 +50,7 @@ class GamePlannerBuilderTest extends TestCase
         $this->assertDatabaseHas('game_planners', [
             'planner_key' => 'melee-generated',
             'status' => 'published',
-            'version' => 'availability-power-v2',
+            'version' => 'availability-power-v3',
         ]);
         $this->assertDatabaseHas('game_planner_step_items', [
             'item_global_id' => 'terraria:copper_sword',
@@ -86,7 +86,7 @@ class GamePlannerBuilderTest extends TestCase
         $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
         $firstStepId = DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->orderBy('sort_order')->value('id');
         $this->assertSame(5, DB::table('game_planner_step_items')->where('step_id', $firstStepId)->where('slot_type', 'accessory')->count());
-        $this->assertSame(3, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
+        $this->assertSame(5, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
     }
 
     private function createCatalogSchema(): void

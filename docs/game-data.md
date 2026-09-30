@@ -60,7 +60,7 @@ php artisan migrate --force
 php artisan game-data:build-planners
 ```
 
-The `availability-power-v2` engine builds the timeline from catalog facts:
+The `availability-power-v3` engine builds the timeline from catalog facts:
 
 1. It establishes acquisition anchors from drops, explicit game-state flags and
    declared progression constraints.
@@ -72,8 +72,8 @@ The `availability-power-v2` engine builds the timeline from catalog facts:
 4. It creates milestone boundaries from the distribution of actually obtainable
    weapons instead of loading a predefined boss order.
 5. It classifies weapons, armor and accessories for each class/subclass, computes
-   a role-specific power score, and emits a step only when the best available
-   loadout changes by the configured minimum percentage.
+   a role-specific power score, and emits every derived milestone with the best
+   loadout known at that point, including incomplete early-game builds.
 
 Every derived row records its algorithm version, score/rank and confidence. Items
 whose acquisition cannot be established remain queryable in the catalog but are

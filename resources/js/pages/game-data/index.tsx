@@ -13,6 +13,18 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 type IconAsset = {
     url: string;
@@ -90,7 +102,11 @@ type Overview = {
 };
 
 type ItemDetail = {
-    item: ItemSummary & { game_version?: string; mod_version?: string | null };
+    item: ItemSummary &
+        Record<string, unknown> & {
+            game_version?: string;
+            mod_version?: string | null;
+        };
     icon?: IconAsset | null;
     stats_map: Record<
         string,
@@ -98,9 +114,18 @@ type ItemDetail = {
     >;
     categories: Array<{ name: string }>;
     combat_classes: Array<{ name: string }>;
+    tags: Array<{ name: string }>;
+    properties: Array<Record<string, unknown>>;
+    progression: Array<Record<string, unknown>>;
     drops: Array<Record<string, unknown>>;
     recipes: Array<Record<string, unknown>>;
+    used_in_recipes: Array<Record<string, unknown>>;
     acquisition_methods: Array<Record<string, unknown>>;
+    shops: Array<Record<string, unknown>>;
+    relationships: Array<Record<string, unknown>>;
+    related_from: Array<Record<string, unknown>>;
+    sources: Array<Record<string, unknown>>;
+    completeness?: Record<string, unknown>;
     planner?: {
         availability?: Array<Record<string, unknown>>;
         recommendations?: Array<Record<string, unknown>>;
@@ -123,6 +148,120 @@ async function getJson<T>(url: string): Promise<T> {
     }
 
     return payload.data;
+}
+
+function formatLabel(value: string): string {
+    return value.replaceAll('_', ' ');
+}
+
+function formatStatValue(value: unknown): string {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+
+    const numeric =
+        typeof value === 'number'
+            ? value
+            : typeof value === 'string' && /^-?\d+(?:\.\d+)?$/.test(value)
+              ? Number(value)
+              : null;
+
+    if (numeric !== null && Number.isFinite(numeric)) {
+        return numeric.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    }
+
+    return String(value);
+}
+
+function formatDetailValue(value: unknown): string {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+
+    if (typeof value === 'boolean') {
+        return value ? 'Sim' : 'Não';
+    }
+
+    if (typeof value === 'number') {
+        return formatStatValue(value);
+    }
+
+    if (typeof value === 'object') {
+        return JSON.stringify(value);
+    }
+
+    return String(value);
+}
+
+function recordTitle(record: Record<string, unknown>, index: number): string {
+    for (const key of [
+        'display_name',
+        'item_name',
+        'result_name',
+        'npc_name',
+        'source_item_name',
+        'vendor_name',
+        'name',
+        'global_id',
+        'method_type',
+    ]) {
+        if (record[key]) {
+            return String(record[key]);
+        }
+    }
+
+    return `Registro ${index + 1}`;
+}
+
+function DetailRecords({
+    title,
+    records,
+}: {
+    title: string;
+    records: Array<Record<string, unknown>>;
+}) {
+    if (records.length === 0) {
+        return null;
+    }
+
+    return (
+        <section>
+            <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                {title}{' '}
+                <span className="text-[#81768f]">({records.length})</span>
+            </h3>
+            <div className="grid gap-3 xl:grid-cols-2">
+                {records.map((record, index) => (
+                    <article
+                        key={`${title}-${index}-${String(record.global_id ?? record.id ?? '')}`}
+                        className="rounded-lg border border-[#4b405f] bg-[#171424] p-3"
+                    >
+                        <strong className="block text-sm text-[#fff8dc]">
+                            {recordTitle(record, index)}
+                        </strong>
+                        <dl className="mt-2 grid gap-1.5 text-xs">
+                            {Object.entries(record).map(([key, value]) => (
+                                <div
+                                    key={key}
+                                    className="grid grid-cols-[minmax(90px,0.35fr)_minmax(0,1fr)] gap-2 border-t border-white/5 pt-1.5"
+                                >
+                                    <dt className="truncate font-bold text-[#81768f] uppercase">
+                                        {formatLabel(key)}
+                                    </dt>
+                                    <dd className="break-words whitespace-pre-wrap text-[#c9c1d7]">
+                                        {formatDetailValue(value)}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    </article>
+                ))}
+            </div>
+        </section>
+    );
 }
 
 function ItemIcon({
@@ -164,44 +303,78 @@ function BuildSlot({
     accent?: boolean;
 }) {
     const item = recommendation?.item ?? null;
+    const stats = Object.entries(item?.stats ?? {});
 
     return (
-        <button
-            type="button"
-            disabled={!item}
-            onClick={() => item && onSelect(item.global_id)}
-            className={`group flex min-h-16 min-w-0 items-center gap-2 rounded-md border-2 p-2 text-left shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] transition ${
-                accent
-                    ? 'border-[#d7a84b] bg-[#2f284e] hover:bg-[#3a315e]'
-                    : 'border-[#5f527a] bg-[#211d38] hover:border-[#9a83c5] hover:bg-[#2b2547]'
-            } disabled:cursor-default disabled:border-[#3a344d] disabled:bg-[#171522]`}
-        >
-            <span className="grid size-12 shrink-0 place-items-center rounded border border-white/10 bg-[#0e0d18]/80 p-1">
-                {item?.icon?.url ? (
-                    <img
-                        src={item.icon.url}
-                        alt=""
-                        className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
-                        loading="lazy"
-                    />
-                ) : (
-                    <span className="size-5 rounded border border-dashed border-white/20" />
-                )}
-            </span>
-            <span className="min-w-0">
-                <small className="block text-[9px] font-black tracking-[0.14em] text-[#d6bc79] uppercase">
-                    {label}
-                </small>
-                <strong className="block truncate text-xs text-[#fff8dc]">
-                    {item?.display_name ?? 'Slot vazio'}
-                </strong>
-                {item && (
-                    <small className="block truncate text-[10px] text-[#aaa1bd]">
-                        {item.mod_name}
-                    </small>
-                )}
-            </span>
-        </button>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button
+                    type="button"
+                    disabled={!item}
+                    onClick={() => item && onSelect(item.global_id)}
+                    className={`group flex min-h-16 min-w-0 items-center gap-2 rounded-md border-2 p-2 text-left shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] transition ${
+                        accent
+                            ? 'border-[#d7a84b] bg-[#2f284e] hover:bg-[#3a315e]'
+                            : 'border-[#5f527a] bg-[#211d38] hover:border-[#9a83c5] hover:bg-[#2b2547]'
+                    } disabled:cursor-default disabled:border-[#3a344d] disabled:bg-[#171522]`}
+                >
+                    <span className="grid size-12 shrink-0 place-items-center rounded border border-white/10 bg-[#0e0d18]/80 p-1">
+                        {item?.icon?.url ? (
+                            <img
+                                src={item.icon.url}
+                                alt=""
+                                className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
+                                loading="lazy"
+                            />
+                        ) : (
+                            <span className="size-5 rounded border border-dashed border-white/20" />
+                        )}
+                    </span>
+                    <span className="min-w-0">
+                        <small className="block text-[9px] font-black tracking-[0.14em] text-[#d6bc79] uppercase">
+                            {label}
+                        </small>
+                        <strong className="block truncate text-xs text-[#fff8dc]">
+                            {item?.display_name ?? 'Slot vazio'}
+                        </strong>
+                        {item && (
+                            <small className="block truncate text-[10px] text-[#aaa1bd]">
+                                {item.mod_name}
+                            </small>
+                        )}
+                    </span>
+                </button>
+            </TooltipTrigger>
+            {item && (
+                <TooltipContent
+                    side="top"
+                    className="w-64 border border-[#79649a] bg-[#171424] p-3 text-[#fff8dc] shadow-2xl"
+                >
+                    <strong className="block text-sm">
+                        {item.display_name}
+                    </strong>
+                    {stats.length > 0 && (
+                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-white/10 pt-2">
+                            {stats.map(([key, value]) => (
+                                <div key={key} className="contents">
+                                    <dt className="text-[#aaa1bd] uppercase">
+                                        {formatLabel(key)}
+                                    </dt>
+                                    <dd className="text-right font-bold text-[#e8cf8b]">
+                                        {formatStatValue(value)}
+                                    </dd>
+                                </div>
+                            ))}
+                        </dl>
+                    )}
+                    {(item.tooltip || item.description) && (
+                        <p className="mt-2 border-t border-white/10 pt-2 leading-relaxed text-[#c9c1d7]">
+                            {item.tooltip || item.description}
+                        </p>
+                    )}
+                </TooltipContent>
+            )}
+        </Tooltip>
     );
 }
 
@@ -248,7 +421,9 @@ function GameBuildCard({
                         <p className="mt-2 text-[10px] text-[#aaa1bd]">
                             Dano base:{' '}
                             <strong className="text-[#fff8dc]">
-                                {String(step.build.weapon.item.stats.damage)}
+                                {formatStatValue(
+                                    step.build.weapon.item.stats.damage,
+                                )}
                             </strong>
                         </p>
                     )}
@@ -294,6 +469,175 @@ function GameBuildCard({
                 </div>
             </div>
         </article>
+    );
+}
+
+function ItemDetailDialog({
+    detail,
+    onClose,
+}: {
+    detail: ItemDetail | null;
+    onClose: () => void;
+}) {
+    const item = detail?.item;
+
+    return (
+        <Dialog
+            open={detail !== null}
+            onOpenChange={(open) => !open && onClose()}
+        >
+            <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden border-[#6f5832] bg-[#0d0c16] p-0 text-[#fff8dc]">
+                {detail && item && (
+                    <>
+                        <DialogHeader className="border-b border-[#4b405f] bg-[linear-gradient(180deg,#302744,#171424)] p-5 pr-14 text-left">
+                            <div className="flex items-start gap-4">
+                                <ItemIcon
+                                    item={{ ...item, icon: detail.icon }}
+                                />
+                                <div className="min-w-0">
+                                    <p className="text-[10px] font-black tracking-[0.18em] text-[#d7a84b] uppercase">
+                                        {item.mod_name ?? 'Terraria'}
+                                    </p>
+                                    <DialogTitle className="mt-1 text-2xl font-black text-[#fff8dc]">
+                                        {item.display_name}
+                                    </DialogTitle>
+                                    <DialogDescription className="mt-1 text-xs break-all text-[#aaa1bd]">
+                                        {item.global_id}
+                                    </DialogDescription>
+                                </div>
+                            </div>
+                        </DialogHeader>
+
+                        <div className="flex-1 space-y-7 overflow-y-auto p-5 md:p-7">
+                            {(item.tooltip || item.description) && (
+                                <p className="max-w-5xl rounded-lg border border-[#4b405f] bg-[#171424] p-4 text-sm leading-relaxed text-[#c9c1d7]">
+                                    {item.tooltip || item.description}
+                                </p>
+                            )}
+
+                            <section>
+                                <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                                    Status
+                                </h3>
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                    {Object.entries(detail.stats_map).map(
+                                        ([key, stat]) => (
+                                            <div
+                                                key={key}
+                                                className="rounded-lg border border-[#4b405f] bg-[#171424] p-3"
+                                            >
+                                                <small className="block text-[10px] font-bold text-[#81768f] uppercase">
+                                                    {formatLabel(key)}
+                                                </small>
+                                                <strong className="mt-1 block text-sm text-[#fff8dc]">
+                                                    {formatStatValue(
+                                                        stat.value,
+                                                    )}{' '}
+                                                    {stat.unit ?? ''}
+                                                </strong>
+                                            </div>
+                                        ),
+                                    )}
+                                </div>
+                            </section>
+
+                            <section>
+                                <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                                    Classificação
+                                </h3>
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                    {detail.combat_classes.map((entry) => (
+                                        <span
+                                            key={`class-${entry.name}`}
+                                            className="rounded-full border border-[#d7a84b]/35 bg-[#d7a84b]/10 px-3 py-1 text-[#e8cf8b]"
+                                        >
+                                            <Swords className="mr-1 inline size-3" />
+                                            {entry.name}
+                                        </span>
+                                    ))}
+                                    {detail.categories.map((entry) => (
+                                        <span
+                                            key={`category-${entry.name}`}
+                                            className="rounded-full border border-[#79649a]/50 bg-[#302744] px-3 py-1 text-[#c9c1d7]"
+                                        >
+                                            <Shield className="mr-1 inline size-3" />
+                                            {entry.name}
+                                        </span>
+                                    ))}
+                                    {detail.tags.map((entry) => (
+                                        <span
+                                            key={`tag-${entry.name}`}
+                                            className="rounded-full border border-[#4b405f] bg-[#171424] px-3 py-1 text-[#aaa1bd]"
+                                        >
+                                            {entry.name}
+                                        </span>
+                                    ))}
+                                </div>
+                            </section>
+
+                            <DetailRecords
+                                title="Identificação e metadados"
+                                records={[item]}
+                            />
+                            <DetailRecords
+                                title="Propriedades"
+                                records={detail.properties}
+                            />
+                            <DetailRecords
+                                title="Progressão"
+                                records={detail.progression}
+                            />
+                            <DetailRecords
+                                title="Receitas para criar"
+                                records={detail.recipes}
+                            />
+                            <DetailRecords
+                                title="Usado em receitas"
+                                records={detail.used_in_recipes}
+                            />
+                            <DetailRecords
+                                title="Drops"
+                                records={detail.drops}
+                            />
+                            <DetailRecords
+                                title="Formas de obtenção"
+                                records={detail.acquisition_methods}
+                            />
+                            <DetailRecords
+                                title="Lojas"
+                                records={detail.shops}
+                            />
+                            <DetailRecords
+                                title="Relacionamentos"
+                                records={detail.relationships}
+                            />
+                            <DetailRecords
+                                title="Relacionado por"
+                                records={detail.related_from}
+                            />
+                            <DetailRecords
+                                title="Fontes dos dados"
+                                records={detail.sources}
+                            />
+                            <DetailRecords
+                                title="Disponibilidade no planner"
+                                records={detail.planner?.availability ?? []}
+                            />
+                            <DetailRecords
+                                title="Recomendações do planner"
+                                records={detail.planner?.recommendations ?? []}
+                            />
+                            {detail.completeness && (
+                                <DetailRecords
+                                    title="Qualidade dos dados"
+                                    records={[detail.completeness]}
+                                />
+                            )}
+                        </div>
+                    </>
+                )}
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -713,99 +1057,10 @@ export default function GameDataIndex() {
                     </section>
                 </div>
 
-                {selectedItem && (
-                    <section className="rounded-xl border border-primary/30 bg-card p-5 md:p-7">
-                        <div className="flex flex-col gap-5 lg:flex-row">
-                            <ItemIcon
-                                item={{
-                                    ...selectedItem.item,
-                                    icon: selectedItem.icon,
-                                }}
-                            />
-                            <div className="min-w-0 flex-1">
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <div>
-                                        <p className="text-xs font-bold tracking-wider text-primary uppercase">
-                                            {selectedItem.item.mod_name}
-                                        </p>
-                                        <h2 className="text-2xl font-black">
-                                            {selectedItem.item.display_name}
-                                        </h2>
-                                        <code className="text-xs text-muted-foreground">
-                                            {selectedItem.item.global_id}
-                                        </code>
-                                    </div>
-                                    <button
-                                        onClick={() => setSelectedItem(null)}
-                                        className="text-sm text-muted-foreground hover:text-foreground"
-                                    >
-                                        fechar
-                                    </button>
-                                </div>
-                                {(selectedItem.item.tooltip ||
-                                    selectedItem.item.description) && (
-                                    <p className="mt-4 max-w-4xl text-sm text-muted-foreground">
-                                        {selectedItem.item.tooltip ||
-                                            selectedItem.item.description}
-                                    </p>
-                                )}
-                                <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                                    {Object.entries(selectedItem.stats_map).map(
-                                        ([key, stat]) => (
-                                            <div
-                                                key={key}
-                                                className="rounded-md border border-border p-3"
-                                            >
-                                                <small className="block text-muted-foreground uppercase">
-                                                    {key.replaceAll('_', ' ')}
-                                                </small>
-                                                <strong>
-                                                    {String(stat.value ?? '—')}{' '}
-                                                    {stat.unit ?? ''}
-                                                </strong>
-                                            </div>
-                                        ),
-                                    )}
-                                </div>
-                                <div className="mt-5 flex flex-wrap gap-2 text-xs">
-                                    {selectedItem.combat_classes.map(
-                                        (entry) => (
-                                            <span
-                                                key={entry.name}
-                                                className="rounded-full bg-primary/15 px-3 py-1 text-primary"
-                                            >
-                                                <Swords className="mr-1 inline size-3" />
-                                                {entry.name}
-                                            </span>
-                                        ),
-                                    )}
-                                    {selectedItem.categories.map((entry) => (
-                                        <span
-                                            key={entry.name}
-                                            className="rounded-full bg-muted px-3 py-1"
-                                        >
-                                            <Shield className="mr-1 inline size-3" />
-                                            {entry.name}
-                                        </span>
-                                    ))}
-                                    <span className="rounded-full bg-muted px-3 py-1">
-                                        {selectedItem.recipes.length} receitas
-                                    </span>
-                                    <span className="rounded-full bg-muted px-3 py-1">
-                                        {selectedItem.drops.length} drops
-                                    </span>
-                                    <span className="rounded-full bg-muted px-3 py-1">
-                                        {
-                                            selectedItem.acquisition_methods
-                                                .length
-                                        }{' '}
-                                        formas de obter
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-                )}
+                <ItemDetailDialog
+                    detail={selectedItem}
+                    onClose={() => setSelectedItem(null)}
+                />
             </main>
         </>
     );
