@@ -34,7 +34,7 @@ class GamePlannerBuilder
         $dropMethods = $this->loadDropMethods($bosses);
         $recipes = $this->loadRecipes();
         $availability = $this->deriveAvailability($items, $dropMethods, $recipes);
-        $milestones = $this->deriveMilestones($items, $availability, $bosses, $tierCount);
+        $milestones = $this->deriveMilestones($items, $availability, $tierCount);
         $archetypes = DB::table('game_build_archetypes')->where('game_key', (string) $trackData['game_key'])
             ->where('is_active', true)
             ->orderBy('sort_order')->orderBy('name')->get();
@@ -227,33 +227,52 @@ class GamePlannerBuilder
                 'defense.numeric_value as defense',
             ]);
 
-        $scores = [];
+        $combatScores = [];
         foreach ($rows as $boss) {
             $row = (array) $boss;
             $life = max(1.0, (float) ($row['life'] ?? 1));
             $score = log10($life + 1) * 100 + (float) ($row['damage'] ?? 0) + (float) ($row['defense'] ?? 0) * 2;
-            $scores[] = $score;
+            $combatScores[] = $score;
             $bosses[(int) $row['id']] = ['rank' => 0, 'name' => (string) $row['display_name'], 'score' => $score];
         }
 
-        sort($scores, SORT_NUMERIC);
-        $count = count($scores);
-        foreach ($bosses as &$boss) {
-            $position = $this->lowerBound($scores, $boss['score']);
-            $percentile = $count <= 1 ? 0.0 : $position / ($count - 1);
-            $boss['rank'] = 100 + (int) round($percentile * (self::MAX_PROGRESS_RANK - 100));
-        }
-        unset($boss);
-
-        foreach ($db->table('drops')->whereNotNull('npc_id')->whereNotNull('item_id')
-            ->get(['npc_id', 'item_id']) as $drop) {
+        $bossFloorRanks = [];
+        $bossDropPower = [];
+        foreach ($db->table('drops')->whereNotNull('npc_id')->whereNotNull('item_id')->get(['npc_id', 'item_id']) as $drop) {
             $row = (array) $drop;
             $npcId = (int) $row['npc_id'];
             $itemId = (int) $row['item_id'];
             if (isset($bosses[$npcId], $items[$itemId])) {
-                $bosses[$npcId]['rank'] = max($bosses[$npcId]['rank'], (int) $items[$itemId]['floor_rank']);
+                $bossFloorRanks[$npcId] = max($bossFloorRanks[$npcId] ?? 0, (int) $items[$itemId]['floor_rank']);
+                if ((float) ($items[$itemId]['stats']['damage'] ?? 0) > 0) {
+                    $bossDropPower[$npcId] = max(
+                        $bossDropPower[$npcId] ?? 0.0,
+                        $this->powerScore($items[$itemId], 'weapon', '')
+                    );
+                }
             }
         }
+
+        sort($combatScores, SORT_NUMERIC);
+        $dropPowerScores = array_values($bossDropPower);
+        sort($dropPowerScores, SORT_NUMERIC);
+        $combatCount = count($combatScores);
+        $dropPowerCount = count($dropPowerScores);
+        foreach ($bosses as $npcId => &$boss) {
+            $combatPosition = $this->lowerBound($combatScores, $boss['score']);
+            $combatPercentile = $combatCount <= 1 ? 0.0 : $combatPosition / ($combatCount - 1);
+            $dropPercentile = 0.0;
+            if (isset($bossDropPower[$npcId])) {
+                $dropPosition = $this->lowerBound($dropPowerScores, $bossDropPower[$npcId]);
+                $dropPercentile = $dropPowerCount <= 1 ? 0.0 : $dropPosition / ($dropPowerCount - 1);
+            }
+            $percentile = max($combatPercentile, $dropPercentile);
+            $boss['rank'] = max(
+                $bossFloorRanks[$npcId] ?? 0,
+                100 + (int) round($percentile * (self::MAX_PROGRESS_RANK - 100))
+            );
+        }
+        unset($boss);
 
         return $bosses;
     }
@@ -424,10 +443,9 @@ class GamePlannerBuilder
     /**
      * @param  array<int, array<string, mixed>>  $items
      * @param  array<int, array{rank: int, type: string, confidence: string}>  $availability
-     * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
      * @return list<array{key: string, name: string, rank: int, description: string}>
      */
-    private function deriveMilestones(array $items, array $availability, array $bosses, int $tierCount): array
+    private function deriveMilestones(array $items, array $availability, int $tierCount): array
     {
         $weaponRanks = [];
         foreach ($items as $itemId => $item) {
@@ -447,33 +465,18 @@ class GamePlannerBuilder
         $boundaries = array_values(array_unique($boundaries));
         sort($boundaries, SORT_NUMERIC);
 
-        $bossLabels = [];
-        foreach ($bosses as $boss) {
-            $bossLabels[$boss['rank']] = $boss['name'];
-        }
-        ksort($bossLabels, SORT_NUMERIC);
-
         $milestones = [];
         foreach ($boundaries as $index => $rank) {
             $phase = $rank >= 2000 ? 'Post-Moon Lord' : ($rank >= 1000 ? 'Hardmode' : 'Pre-Hardmode');
             $label = $phase.' — Tier '.($index + 1);
-            $nearestBoss = null;
-            foreach ($bossLabels as $bossRank => $bossName) {
-                if ($bossRank <= $rank) {
-                    $nearestBoss = $bossName;
-                } else {
-                    break;
-                }
-            }
-            if ($nearestBoss !== null && $rank !== 1000 && $rank !== 2000) {
-                $label = "After {$nearestBoss} — generated tier ".($index + 1);
-            }
             if ($rank === 0) {
                 $label = 'Starting availability';
             } elseif ($rank === 1000) {
                 $label = 'Hardmode threshold';
             } elseif ($rank === 2000) {
                 $label = 'Post-Moon Lord threshold';
+            } elseif ($rank === self::MAX_PROGRESS_RANK) {
+                $label = 'End of known progression';
             }
             $milestones[] = [
                 'key' => 'generated-tier-'.($index + 1),
