@@ -60,7 +60,7 @@ php artisan migrate --force
 php artisan game-data:build-planners
 ```
 
-The `availability-power-v1` engine builds the timeline from catalog facts:
+The `availability-power-v2` engine builds the timeline from catalog facts:
 
 1. It establishes acquisition anchors from drops, explicit game-state flags and
    declared progression constraints.

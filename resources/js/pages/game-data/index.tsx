@@ -3,10 +3,12 @@ import {
     AlertCircle,
     Boxes,
     ChevronRight,
+    Gem,
     LoaderCircle,
     Search,
     Shield,
     Sparkles,
+    Sword,
     Swords,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -37,12 +39,27 @@ type PlannerItem = {
     item: ItemSummary | null;
 };
 
+type BuildLoadout = {
+    weapon: PlannerItem | null;
+    armor: {
+        head: PlannerItem | null;
+        body: PlannerItem | null;
+        legs: PlannerItem | null;
+        other: PlannerItem[];
+    };
+    accessories: PlannerItem[];
+    missing_slots: string[];
+    completion: number;
+    total_slots: number;
+};
+
 type TimelineStep = {
     id: number;
     title: string;
     milestone_name: string;
     milestone_description?: string | null;
     items: PlannerItem[];
+    build: BuildLoadout;
 };
 
 type Planner = {
@@ -135,6 +152,151 @@ function ItemIcon({
     );
 }
 
+function BuildSlot({
+    label,
+    recommendation,
+    onSelect,
+    accent = false,
+}: {
+    label: string;
+    recommendation: PlannerItem | null;
+    onSelect: (globalId: string) => void;
+    accent?: boolean;
+}) {
+    const item = recommendation?.item ?? null;
+
+    return (
+        <button
+            type="button"
+            disabled={!item}
+            onClick={() => item && onSelect(item.global_id)}
+            className={`group flex min-h-16 min-w-0 items-center gap-2 rounded-md border-2 p-2 text-left shadow-[inset_0_0_0_1px_rgb(255_255_255/0.08)] transition ${
+                accent
+                    ? 'border-[#d7a84b] bg-[#2f284e] hover:bg-[#3a315e]'
+                    : 'border-[#5f527a] bg-[#211d38] hover:border-[#9a83c5] hover:bg-[#2b2547]'
+            } disabled:cursor-default disabled:border-[#3a344d] disabled:bg-[#171522]`}
+        >
+            <span className="grid size-12 shrink-0 place-items-center rounded border border-white/10 bg-[#0e0d18]/80 p-1">
+                {item?.icon?.url ? (
+                    <img
+                        src={item.icon.url}
+                        alt=""
+                        className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
+                        loading="lazy"
+                    />
+                ) : (
+                    <span className="size-5 rounded border border-dashed border-white/20" />
+                )}
+            </span>
+            <span className="min-w-0">
+                <small className="block text-[9px] font-black tracking-[0.14em] text-[#d6bc79] uppercase">
+                    {label}
+                </small>
+                <strong className="block truncate text-xs text-[#fff8dc]">
+                    {item?.display_name ?? 'Slot vazio'}
+                </strong>
+                {item && (
+                    <small className="block truncate text-[10px] text-[#aaa1bd]">
+                        {item.mod_name}
+                    </small>
+                )}
+            </span>
+        </button>
+    );
+}
+
+function GameBuildCard({
+    step,
+    onSelect,
+}: {
+    step: TimelineStep;
+    onSelect: (globalId: string) => void;
+}) {
+    const accessories = Array.from<PlannerItem | null>({ length: 5 }).map(
+        (_, index) => step.build.accessories[index] ?? null,
+    );
+
+    return (
+        <article className="overflow-hidden rounded-xl border-2 border-[#6f5832] bg-[#141221] shadow-[0_18px_45px_rgb(0_0_0/0.42),inset_0_0_35px_rgb(91_68_130/0.18)]">
+            <div className="flex items-center justify-between gap-3 border-b-2 border-[#6f5832] bg-[linear-gradient(180deg,#443865,#2a2444)] px-4 py-3">
+                <div className="min-w-0">
+                    <p className="text-[9px] font-black tracking-[0.2em] text-[#d7a84b] uppercase">
+                        Loadout recomendado
+                    </p>
+                    <h3 className="truncate text-sm font-black text-[#fff8dc]">
+                        {step.title || step.milestone_name}
+                    </h3>
+                </div>
+                <span className="shrink-0 rounded border border-[#d7a84b]/50 bg-black/20 px-2 py-1 text-[10px] font-bold text-[#e8cf8b]">
+                    {step.build.completion}/{step.build.total_slots} slots
+                </span>
+            </div>
+
+            <div className="grid gap-4 p-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+                <div>
+                    <p className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-wider text-[#b9a9d4] uppercase">
+                        <Sword className="size-3.5 text-[#d7a84b]" /> Arma
+                        principal
+                    </p>
+                    <BuildSlot
+                        label="Arma"
+                        recommendation={step.build.weapon}
+                        onSelect={onSelect}
+                        accent
+                    />
+                    {step.build.weapon?.item?.stats?.damage != null && (
+                        <p className="mt-2 text-[10px] text-[#aaa1bd]">
+                            Dano base:{' '}
+                            <strong className="text-[#fff8dc]">
+                                {String(step.build.weapon.item.stats.damage)}
+                            </strong>
+                        </p>
+                    )}
+                </div>
+
+                <div>
+                    <p className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-wider text-[#b9a9d4] uppercase">
+                        <Shield className="size-3.5 text-[#84b7d5]" /> Armadura
+                    </p>
+                    <div className="grid gap-2">
+                        <BuildSlot
+                            label="Capacete"
+                            recommendation={step.build.armor.head}
+                            onSelect={onSelect}
+                        />
+                        <BuildSlot
+                            label="Peitoral"
+                            recommendation={step.build.armor.body}
+                            onSelect={onSelect}
+                        />
+                        <BuildSlot
+                            label="Pernas"
+                            recommendation={step.build.armor.legs}
+                            onSelect={onSelect}
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <div className="border-t border-[#4b405f] bg-[#0e0d18]/55 p-4">
+                <p className="mb-2 flex items-center gap-2 text-[10px] font-black tracking-wider text-[#b9a9d4] uppercase">
+                    <Gem className="size-3.5 text-[#dc79a5]" /> Acessórios
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                    {accessories.map((accessory, index) => (
+                        <BuildSlot
+                            key={accessory?.id ?? `empty-accessory-${index}`}
+                            label={`Slot ${index + 1}`}
+                            recommendation={accessory}
+                            onSelect={onSelect}
+                        />
+                    ))}
+                </div>
+            </div>
+        </article>
+    );
+}
+
 export default function GameDataIndex() {
     const [overview, setOverview] = useState<Overview | null>(null);
     const [archetypes, setArchetypes] = useState<Archetype[]>([]);
@@ -150,8 +312,8 @@ export default function GameDataIndex() {
 
     const loadPlanner = useCallback(async (plannerKey: string) => {
         if (!plannerKey) {
-return;
-}
+            return;
+        }
 
         setLoadingPlanner(true);
         setError(null);
@@ -184,8 +346,8 @@ return;
         ])
             .then(([overviewData, archetypeData, plannerData]) => {
                 if (!active) {
-return;
-}
+                    return;
+                }
 
                 setOverview(overviewData);
                 setArchetypes(archetypeData);
@@ -194,17 +356,17 @@ return;
                 setSelectedPlannerKey(first);
 
                 if (first) {
-void loadPlanner(first);
-}
+                    void loadPlanner(first);
+                }
             })
             .catch((reason: unknown) => {
                 if (active) {
-setError(
+                    setError(
                         reason instanceof Error
                             ? reason.message
                             : 'Falha ao carregar os dados.',
                     );
-}
+                }
             });
 
         return () => {
@@ -232,8 +394,8 @@ setError(
         event.preventDefault();
 
         if (!query.trim()) {
-return;
-}
+            return;
+        }
 
         setSearching(true);
         setError(null);
@@ -414,8 +576,8 @@ return;
                                                 );
 
                                                 if (!summary) {
-return null;
-}
+                                                    return null;
+                                                }
 
                                                 return (
                                                     <button
@@ -443,105 +605,108 @@ return null;
                         </div>
                     </aside>
 
-                    <section className="min-w-0 rounded-xl border border-border bg-card p-4 md:p-6">
+                    <section className="relative min-w-0 overflow-hidden rounded-xl border border-[#4f4268] bg-[#0d0c16] p-4 md:p-6">
+                        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(83_61_120/0.28),transparent_42%),linear-gradient(rgb(255_255_255/0.018)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.018)_1px,transparent_1px)] bg-[size:auto,16px_16px,16px_16px]" />
                         {loadingPlanner ? (
-                            <div className="grid min-h-64 place-items-center">
+                            <div className="relative grid min-h-64 place-items-center">
                                 <LoaderCircle className="size-8 animate-spin text-primary" />
                             </div>
                         ) : planner ? (
-                            <>
-                                <div className="mb-6">
+                            <div className="relative">
+                                <div className="mb-8 rounded-lg border border-[#64537f] bg-[#171424]/90 p-4 shadow-lg">
                                     <div className="flex flex-wrap items-center gap-2 text-xs">
-                                        <span className="rounded-full bg-primary/15 px-2 py-1 font-bold text-primary">
+                                        <span className="rounded border border-[#d7a84b]/40 bg-[#d7a84b]/10 px-2 py-1 font-black text-[#e9c76f]">
                                             {planner.archetype_name}
                                         </span>
-                                        <span className="rounded-full bg-muted px-2 py-1">
+                                        <span className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[#aaa1bd]">
                                             v{planner.version}
                                         </span>
-                                        <span className="rounded-full bg-muted px-2 py-1">
+                                        <span className="rounded border border-white/10 bg-white/5 px-2 py-1 text-[#aaa1bd]">
                                             {planner.timeline.length} fases
                                         </span>
                                     </div>
-                                    <h2 className="mt-3 text-2xl font-black">
+                                    <h2 className="mt-3 text-2xl font-black text-[#fff8dc]">
                                         {planner.name}
                                     </h2>
                                     {planner.description && (
-                                        <p className="mt-2 text-sm text-muted-foreground">
+                                        <p className="mt-2 text-sm text-[#aaa1bd]">
                                             {planner.description}
                                         </p>
                                     )}
                                 </div>
-                                <ol className="relative ml-3 border-l border-primary/30 pl-7">
-                                    {planner.timeline.map((step, index) => (
-                                        <li
-                                            key={step.id}
-                                            className="relative pb-8 last:pb-0"
-                                        >
-                                            <span className="absolute top-0 -left-[2.45rem] grid size-5 place-items-center rounded-full bg-primary text-[10px] font-black text-primary-foreground">
-                                                {index + 1}
-                                            </span>
-                                            <h3 className="text-lg font-bold">
-                                                {step.title ||
-                                                    step.milestone_name}
-                                            </h3>
-                                            {step.milestone_description && (
-                                                <p className="mt-1 text-sm text-muted-foreground">
-                                                    {step.milestone_description}
-                                                </p>
-                                            )}
-                                            <div className="mt-3 grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
-                                                {step.items.map(
-                                                    (recommendation) =>
-                                                        recommendation.item && (
-                                                            <button
-                                                                key={
-                                                                    recommendation.id
-                                                                }
-                                                                onClick={() =>
-                                                                    void inspectItem(
-                                                                        recommendation
-                                                                            .item!
-                                                                            .global_id,
-                                                                    )
-                                                                }
-                                                                className="flex min-w-0 items-center gap-3 rounded-lg border border-border bg-background/40 p-3 text-left hover:border-primary/50"
-                                                            >
-                                                                <ItemIcon
-                                                                    item={
-                                                                        recommendation.item
-                                                                    }
-                                                                />
-                                                                <span className="min-w-0">
-                                                                    <small className="block text-[10px] font-bold tracking-wider text-primary uppercase">
-                                                                        {
-                                                                            recommendation.slot_type
-                                                                        }
-                                                                    </small>
-                                                                    <strong className="block truncate text-sm">
-                                                                        {
-                                                                            recommendation
-                                                                                .item
-                                                                                .display_name
-                                                                        }
-                                                                    </strong>
-                                                                    <small className="text-muted-foreground">
-                                                                        {
-                                                                            recommendation
-                                                                                .item
-                                                                                .mod_name
-                                                                        }
-                                                                    </small>
-                                                                </span>
-                                                            </button>
-                                                        ),
-                                                )}
-                                            </div>
-                                        </li>
-                                    ))}
+                                <ol className="relative grid gap-10 before:absolute before:top-3 before:bottom-3 before:left-5 before:w-1 before:rounded-full before:bg-[linear-gradient(#6c5790,#d7a84b,#6c5790)] lg:before:left-1/2 lg:before:-translate-x-1/2">
+                                    {planner.timeline.map((step, index) => {
+                                        const cardSide =
+                                            index % 2 === 0
+                                                ? 'lg:col-start-1'
+                                                : 'lg:col-start-3';
+                                        const infoSide =
+                                            index % 2 === 0
+                                                ? 'lg:col-start-3 lg:text-left'
+                                                : 'lg:col-start-1 lg:row-start-1 lg:text-right';
+
+                                        return (
+                                            <li
+                                                key={step.id}
+                                                className="relative grid min-w-0 grid-cols-[40px_minmax(0,1fr)] gap-x-4 lg:grid-cols-[minmax(0,1fr)_64px_minmax(0,1fr)] lg:gap-x-5"
+                                            >
+                                                <div
+                                                    className={`col-start-2 min-w-0 ${cardSide}`}
+                                                >
+                                                    <GameBuildCard
+                                                        step={step}
+                                                        onSelect={(globalId) =>
+                                                            void inspectItem(
+                                                                globalId,
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
+
+                                                <div className="absolute top-5 left-0 z-10 grid size-10 place-items-center rounded-full border-4 border-[#d7a84b] bg-[#292141] text-sm font-black text-[#fff8dc] shadow-[0_0_22px_rgb(215_168_75/0.55)] lg:static lg:col-start-2 lg:row-start-1 lg:mx-auto">
+                                                    {index + 1}
+                                                </div>
+
+                                                <div
+                                                    className={`col-start-2 mt-3 self-start rounded-lg border border-[#4b405f] bg-[#171424]/80 p-4 lg:row-start-1 lg:mt-2 ${infoSide}`}
+                                                >
+                                                    <p className="text-[9px] font-black tracking-[0.2em] text-[#d7a84b] uppercase">
+                                                        Marco de progressão
+                                                    </p>
+                                                    <h3 className="mt-1 font-black text-[#fff8dc]">
+                                                        {step.milestone_name}
+                                                    </h3>
+                                                    {step.milestone_description && (
+                                                        <p className="mt-2 text-xs leading-relaxed text-[#aaa1bd]">
+                                                            {
+                                                                step.milestone_description
+                                                            }
+                                                        </p>
+                                                    )}
+                                                    <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-black/35">
+                                                        <div
+                                                            className="h-full rounded-full bg-[linear-gradient(90deg,#7e6aa2,#d7a84b)]"
+                                                            style={{
+                                                                width: `${Math.round((step.build.completion / step.build.total_slots) * 100)}%`,
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <small className="mt-1 block text-[9px] text-[#81768f]">
+                                                        Build{' '}
+                                                        {step.build
+                                                            .completion ===
+                                                        step.build.total_slots
+                                                            ? 'completa'
+                                                            : 'em formação'}
+                                                    </small>
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
                                 </ol>
-                            </>
+                            </div>
                         ) : (
-                            <div className="grid min-h-64 place-items-center text-muted-foreground">
+                            <div className="relative grid min-h-64 place-items-center text-muted-foreground">
                                 Nenhum planner publicado.
                             </div>
                         )}
