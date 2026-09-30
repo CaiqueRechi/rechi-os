@@ -86,7 +86,11 @@ class GamePlannerBuilderTest extends TestCase
         $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
         $firstStepId = DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->orderBy('sort_order')->value('id');
         $this->assertSame(5, DB::table('game_planner_step_items')->where('step_id', $firstStepId)->where('slot_type', 'accessory')->count());
-        $this->assertSame(5, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
+        $trackId = DB::table('game_progression_tracks')->where('track_key', 'terraria-calamity-auto-v1')->value('id');
+        $this->assertSame(
+            DB::table('game_progression_milestones')->where('track_id', $trackId)->count(),
+            DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count()
+        );
     }
 
     private function createCatalogSchema(): void
