@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -17,18 +18,7 @@ class ImportGameIconsCommandTest extends TestCase
     {
         Storage::fake('public');
         config()->set('game-data.icons.disk', 'public');
-
-        Schema::create('mods', function (Blueprint $table): void {
-            $table->id();
-            $table->string('mod_key');
-        });
-        Schema::create('items', function (Blueprint $table): void {
-            $table->id();
-            $table->foreignId('mod_id');
-            $table->string('global_id');
-            $table->string('internal_name');
-            $table->json('raw_json')->nullable();
-        });
+        $this->createCatalogTables();
 
         $modId = DB::table('mods')->insertGetId(['mod_key' => 'calamity']);
         DB::table('items')->insert([
@@ -56,5 +46,58 @@ class ImportGameIconsCommandTest extends TestCase
             'height' => 1,
         ]);
         Storage::disk('public')->assertExists('game-data/items/calamity/test-item.png');
+    }
+
+    public function test_it_uses_the_vanilla_mod_key_for_terraria_wiki_icons(): void
+    {
+        Storage::fake('public');
+        config()->set('game-data.icons.disk', 'public');
+        $this->createCatalogTables();
+
+        $modId = DB::table('mods')->insertGetId(['mod_key' => 'vanilla']);
+        DB::table('items')->insert([
+            'mod_id' => $modId,
+            'global_id' => 'terraria:1',
+            'internal_name' => 'CopperShortsword',
+            'display_name' => 'Copper Shortsword',
+        ]);
+
+        $png = base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg=='
+        );
+        $this->assertIsString($png);
+        Http::fake([
+            'terraria.wiki.gg/api.php*' => Http::response([
+                'query' => ['pages' => [[
+                    'title' => 'File:Copper Shortsword.png',
+                    'imageinfo' => [['url' => 'https://static.wiki.test/Copper_Shortword.png']],
+                ]]],
+            ]),
+            'static.wiki.test/*' => Http::response($png, 200, ['Content-Type' => 'image/png']),
+        ]);
+
+        $this->artisan('game-data:import-icons', ['--mod' => 'terraria'])->assertSuccessful();
+
+        $this->assertDatabaseHas('game_item_assets', [
+            'item_global_id' => 'terraria:1',
+            'source_type' => 'terraria_wiki',
+            'status' => 'ready',
+        ]);
+    }
+
+    private function createCatalogTables(): void
+    {
+        Schema::create('mods', function (Blueprint $table): void {
+            $table->id();
+            $table->string('mod_key');
+        });
+        Schema::create('items', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('mod_id');
+            $table->string('global_id');
+            $table->string('internal_name');
+            $table->string('display_name')->nullable();
+            $table->json('raw_json')->nullable();
+        });
     }
 }

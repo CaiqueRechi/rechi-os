@@ -107,7 +107,7 @@ class GameIconImporter
     {
         $result = ['examined' => 0, 'imported' => 0, 'skipped' => 0, 'missing' => 0, 'failed' => 0];
         $items = $this->catalogDatabase()->table('items as i')->join('mods as m', 'm.id', '=', 'i.mod_id')
-            ->where('m.mod_key', 'terraria')->orderBy('i.id')->get(['i.global_id', 'i.display_name']);
+            ->where('m.mod_key', 'vanilla')->orderBy('i.id')->get(['i.global_id', 'i.display_name']);
         $pending = [];
         foreach ($items as $item) {
             if ($limit > 0 && $result['examined'] >= $limit) {

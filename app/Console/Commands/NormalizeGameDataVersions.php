@@ -22,7 +22,7 @@ class NormalizeGameDataVersions extends Command
 
         try {
             $calamityModId = $db->table('mods')->where('mod_key', 'calamity')->value('id');
-            $terrariaModId = $db->table('mods')->where('mod_key', 'terraria')->value('id');
+            $terrariaModId = $db->table('mods')->where('mod_key', 'vanilla')->value('id');
             if ($calamityModId === null || $terrariaModId === null) {
                 $this->error('Required Terraria and Calamity mod rows were not found.');
 
