@@ -9,11 +9,9 @@ use RuntimeException;
 
 class GamePlannerBuilder
 {
-    private const ALGORITHM_VERSION = 'availability-power-v2';
+    private const ALGORITHM_VERSION = 'availability-power-v3';
 
     private const MAX_PROGRESS_RANK = 3000;
-
-    private const ACCESSORY_SLOT_COUNT = 5;
 
     /** @return array<string, int|string> */
     public function build(string $trackKey): array
@@ -943,10 +941,7 @@ class GamePlannerBuilder
         ]);
 
         $recommendationCount = 0;
-        $lastPrimaryByRole = [];
-        $lastPrimaryScoreByRole = [];
-
-        foreach ($milestones as $milestoneIndex => $milestone) {
+        foreach ($milestones as $milestone) {
             $byRole = [];
             foreach ($candidates as $candidate) {
                 if ($candidate['rank'] <= $milestone['rank']) {
@@ -959,23 +954,7 @@ class GamePlannerBuilder
             }
             unset($roleCandidates);
 
-            if (! $this->hasCompleteLoadout($byRole)) {
-                continue;
-            }
-
-            $hasMeaningfulChange = $milestoneIndex === 0;
-            foreach ($byRole as $role => $roleCandidates) {
-                if ($roleCandidates === []) {
-                    continue;
-                }
-                $primary = $roleCandidates[0];
-                $previousId = $lastPrimaryByRole[$role] ?? null;
-                $previousScore = (float) ($lastPrimaryScoreByRole[$role] ?? 0);
-                if ($previousId !== $primary['global_id'] && ($previousScore <= 0 || $primary['score'] >= $previousScore * (1 + $minimumUpgrade))) {
-                    $hasMeaningfulChange = true;
-                }
-            }
-            if (! $hasMeaningfulChange || $byRole === []) {
+            if ($byRole === []) {
                 continue;
             }
 
@@ -983,7 +962,7 @@ class GamePlannerBuilder
                 'planner_id' => $plannerId,
                 'milestone_id' => $milestoneIds[$milestone['key']],
                 'title' => $milestone['name'],
-                'notes' => 'Generated when the best available loadout changes materially.',
+                'notes' => 'Generated for every derived progression milestone using the best currently available loadout.',
                 'sort_order' => $milestone['rank'],
                 'metadata_json' => json_encode(['algorithm' => self::ALGORITHM_VERSION], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
@@ -1014,26 +993,10 @@ class GamePlannerBuilder
                     ]);
                     $recommendationCount++;
                 }
-                if ($roleCandidates !== []) {
-                    $lastPrimaryByRole[$role] = $roleCandidates[0]['global_id'];
-                    $lastPrimaryScoreByRole[$role] = $roleCandidates[0]['score'];
-                }
             }
         }
 
         return $recommendationCount;
-    }
-
-    /** @param array<string, list<array<string, mixed>>> $byRole */
-    private function hasCompleteLoadout(array $byRole): bool
-    {
-        foreach (['weapon', 'armor_head', 'armor_body', 'armor_legs'] as $role) {
-            if (($byRole[$role] ?? []) === []) {
-                return false;
-            }
-        }
-
-        return count($byRole['accessory'] ?? []) >= self::ACCESSORY_SLOT_COUNT;
     }
 
     /**
