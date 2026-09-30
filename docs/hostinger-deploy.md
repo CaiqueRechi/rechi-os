@@ -51,3 +51,19 @@ FTP does not run Artisan: migrations, cache rebuilding, and worker restarts
 still require server-side execution (for example, SSH). Uploads are not atomic
 and there is no automatic rollback. An SSH deployment can address those items
 after the server paths and access are confirmed.
+
+## Current Hostinger paths
+
+The Laravel application is stored at
+`/home/u306488098/domains/rechi.net.br/rechi-os`, while the domain document root
+is `/home/u306488098/domains/rechi.net.br/public_html`. A manual SSH deployment
+must copy the compiled contents of `rechi-os/public/build/` into
+`public_html/build/`; updating only the application copy leaves Vite's public
+manifest stale and new Inertia pages fail with HTTP 500.
+
+The public storage link must point from `public_html/storage` to
+`../rechi-os/storage/app/public`. Hostinger disables the PHP functions used by
+`php artisan storage:link`, so create or verify this symlink directly over SSH.
+After synchronizing a build, run `php artisan view:clear` from the application
+directory and verify that every new Inertia entry is present in
+`public_html/build/manifest.json`.
