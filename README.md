@@ -39,6 +39,11 @@ O registro publico foi desativado. Crie um admin com:
 php artisan portfolio:create-admin email@dominio.com
 ```
 
+O painel administrativo inclui `/dashboard/game-planner`, com busca completa de
+itens de Terraria/Calamity e timelines algorítmicas para classes e subclasses.
+Consulte `docs/game-data.md` para importar o catálogo, os ícones e reconstruir os
+planners.
+
 ## Verificacoes
 
 ```bash

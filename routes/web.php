@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\Dashboard\GameDataController;
+use App\Http\Controllers\Dashboard\GamePlannerDashboardController;
 use App\Http\Controllers\PortfolioController;
 use App\Http\Controllers\SalemActionController;
 use App\Http\Controllers\SalemController;
@@ -18,6 +19,8 @@ Route::post('/salem/actions', SalemActionController::class)->middleware('throttl
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::get('admin', AdminController::class)->middleware('can:managePortfolio')->name('admin.dashboard');
+    Route::get('dashboard/game-planner', GamePlannerDashboardController::class)
+        ->middleware('can:managePortfolio')->name('dashboard.game-planner');
 
     Route::prefix('dashboard/game-data')
         ->middleware('can:managePortfolio')

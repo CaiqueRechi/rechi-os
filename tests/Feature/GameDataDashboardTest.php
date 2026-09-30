@@ -15,6 +15,18 @@ class GameDataDashboardTest extends TestCase
         $this->get('/dashboard/game-data')->assertRedirect(route('login'));
     }
 
+    public function test_only_admin_can_open_the_game_planner_page(): void
+    {
+        $this->get('/dashboard/game-planner')->assertRedirect(route('login'));
+
+        $user = User::factory()->create(['email_verified_at' => now()]);
+        $this->actingAs($user)->get('/dashboard/game-planner')->assertForbidden();
+
+        $admin = User::factory()->create(['is_admin' => true, 'email_verified_at' => now()]);
+        $this->actingAs($admin)->get('/dashboard/game-planner')
+            ->assertOk()->assertInertia(fn ($page) => $page->component('game-data/index'));
+    }
+
     public function test_non_admin_cannot_access_game_data(): void
     {
         $this->actingAs(User::factory()->create())->getJson('/dashboard/game-data')->assertForbidden();
