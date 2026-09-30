@@ -37,6 +37,11 @@ class GamePlannerBuilderTest extends TestCase
             ->where('availability.item_global_id', 'terraria:conditional_blade')
             ->value('milestone.sort_order');
         $this->assertSame(100, $conditionalDropMilestone);
+        $unresolvedBossMilestone = DB::table('game_item_availability as availability')
+            ->join('game_progression_milestones as milestone', 'milestone.id', '=', 'availability.milestone_id')
+            ->where('availability.item_global_id', 'terraria:unresolved_boss_blade')
+            ->value('milestone.sort_order');
+        $this->assertSame(100, $unresolvedBossMilestone);
         $this->assertDatabaseHas('game_planners', [
             'planner_key' => 'melee-generated',
             'status' => 'published',
@@ -47,13 +52,11 @@ class GamePlannerBuilderTest extends TestCase
             'slot_type' => 'weapon',
             'recommendation_tier' => 'core',
         ]);
-        $this->assertDatabaseHas('game_planner_step_items', [
-            'item_global_id' => 'terraria:conditional_blade',
-            'slot_type' => 'weapon',
-            'recommendation_tier' => 'core',
-        ]);
         $this->assertDatabaseMissing('game_planner_step_items', [
             'item_global_id' => 'terraria:unobtainable_blade',
+        ]);
+        $this->assertDatabaseMissing('game_planner_step_items', [
+            'item_global_id' => 'terraria:unresolved_source_blade',
         ]);
 
         $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
@@ -141,6 +144,7 @@ class GamePlannerBuilderTest extends TestCase
             $table->foreignId('item_id')->nullable();
             $table->foreignId('npc_id')->nullable();
             $table->foreignId('source_item_id')->nullable();
+            $table->string('unresolved_source_name')->nullable();
             $table->string('source_type');
             $table->text('condition_text')->nullable();
             $table->json('conditions_json')->nullable();
@@ -175,13 +179,15 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 6, 'mod_id' => 1, 'global_id' => 'terraria:eye_bag', 'display_name' => 'Eye Bag'],
             ['id' => 7, 'mod_id' => 1, 'global_id' => 'terraria:bag_blade', 'display_name' => 'Bag Blade'],
             ['id' => 8, 'mod_id' => 1, 'global_id' => 'terraria:conditional_blade', 'display_name' => 'Conditional Blade'],
+            ['id' => 9, 'mod_id' => 1, 'global_id' => 'terraria:unresolved_boss_blade', 'display_name' => 'Unresolved Boss Blade'],
+            ['id' => 10, 'mod_id' => 1, 'global_id' => 'terraria:unresolved_source_blade', 'display_name' => 'Unresolved Source Blade'],
         ]);
         DB::table('combat_classes')->insert(['id' => 1, 'class_key' => 'melee']);
         DB::table('item_combat_classes')->insert(array_map(
             static fn (int $itemId): array => ['item_id' => $itemId, 'combat_class_id' => 1],
-            [1, 2, 3, 5, 7, 8]
+            [1, 2, 3, 5, 7, 8, 9, 10]
         ));
-        foreach ([[1, 10, 30], [2, 20, 25], [3, 40, 20], [5, 100, 10], [7, 80, 15], [8, 90, 15]] as [$itemId, $damage, $useTime]) {
+        foreach ([[1, 10, 30], [2, 20, 25], [3, 40, 20], [5, 100, 10], [7, 80, 15], [8, 90, 15], [9, 120, 12], [10, 1000, 5]] as [$itemId, $damage, $useTime]) {
             DB::table('item_stats')->insert([
                 ['item_id' => $itemId, 'stat_key' => 'damage', 'numeric_value' => $damage],
                 ['item_id' => $itemId, 'stat_key' => 'use_time', 'numeric_value' => $useTime],
@@ -196,12 +202,14 @@ class GamePlannerBuilderTest extends TestCase
             ['npc_id' => 1, 'stat_key' => 'defense', 'numeric_value' => 10],
         ]);
         DB::table('drops')->insert([
-            ['id' => 1, 'item_id' => 1, 'npc_id' => null, 'source_item_id' => null, 'source_type' => 'world', 'condition_text' => null],
-            ['id' => 2, 'item_id' => 2, 'npc_id' => 1, 'source_item_id' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
-            ['id' => 3, 'item_id' => 4, 'npc_id' => null, 'source_item_id' => null, 'source_type' => 'world', 'condition_text' => null],
-            ['id' => 4, 'item_id' => 6, 'npc_id' => 1, 'source_item_id' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
-            ['id' => 5, 'item_id' => 7, 'npc_id' => null, 'source_item_id' => 6, 'source_type' => 'container', 'condition_text' => null],
-            ['id' => 6, 'item_id' => 8, 'npc_id' => null, 'source_item_id' => null, 'source_type' => 'npc_drop', 'condition_text' => 'Post-Eye Boss'],
+            ['id' => 1, 'item_id' => 1, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 2, 'item_id' => 2, 'npc_id' => 1, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
+            ['id' => 3, 'item_id' => 4, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 4, 'item_id' => 6, 'npc_id' => 1, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
+            ['id' => 5, 'item_id' => 7, 'npc_id' => null, 'source_item_id' => 6, 'unresolved_source_name' => null, 'source_type' => 'container', 'condition_text' => null],
+            ['id' => 6, 'item_id' => 8, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => 'Post-Eye Boss'],
+            ['id' => 7, 'item_id' => 9, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Eye Boss', 'source_type' => 'npc', 'condition_text' => null],
+            ['id' => 8, 'item_id' => 10, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Final Mystery', 'source_type' => 'npc', 'condition_text' => null],
         ]);
         DB::table('recipes')->insert(['id' => 1, 'result_item_id' => 3, 'is_historical' => false]);
         DB::table('recipe_ingredients')->insert([
