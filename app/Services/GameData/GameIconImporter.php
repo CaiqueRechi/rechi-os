@@ -205,13 +205,19 @@ class GameIconImporter
     private function store(string $globalId, string $bytes, string $sourceType, ?string $sourceUrl, array $metadata): void
     {
         $image = getimagesizefromstring($bytes);
-        if ($image === false || $image['mime'] !== 'image/png') {
-            throw new RuntimeException("Invalid PNG asset for {$globalId}.");
+        $extension = $image === false ? null : match ($image['mime']) {
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/webp' => 'webp',
+            default => null,
+        };
+        if ($image === false || $extension === null) {
+            throw new RuntimeException("Invalid image asset for {$globalId}.");
         }
         $disk = (string) config('game-data.icons.disk', 'public');
         $prefix = trim((string) config('game-data.icons.prefix', 'game-data/items'), '/');
         [$namespace, $key] = array_pad(explode(':', $globalId, 2), 2, 'unknown');
-        $path = $prefix.'/'.preg_replace('/[^a-z0-9_-]+/i', '-', $namespace).'/'.preg_replace('/[^a-z0-9_-]+/i', '-', $key).'.png';
+        $path = $prefix.'/'.preg_replace('/[^a-z0-9_-]+/i', '-', $namespace).'/'.preg_replace('/[^a-z0-9_-]+/i', '-', $key).'.'.$extension;
         if (! Storage::disk($disk)->put($path, $bytes)) {
             throw new RuntimeException("Unable to write asset for {$globalId}.");
         }
