@@ -42,6 +42,11 @@ class GamePlannerBuilderTest extends TestCase
             ->where('availability.item_global_id', 'terraria:unresolved_boss_blade')
             ->value('milestone.sort_order');
         $this->assertSame(100, $unresolvedBossMilestone);
+        $recipeGateMilestone = DB::table('game_item_availability as availability')
+            ->join('game_progression_milestones as milestone', 'milestone.id', '=', 'availability.milestone_id')
+            ->where('availability.item_global_id', 'terraria:hardmode_recipe_blade')
+            ->value('milestone.sort_order');
+        $this->assertSame(1000, $recipeGateMilestone);
         $this->assertDatabaseHas('game_planners', [
             'planner_key' => 'melee-generated',
             'status' => 'published',
@@ -60,7 +65,7 @@ class GamePlannerBuilderTest extends TestCase
         ]);
 
         $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
-        $this->assertSame(2, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
+        $this->assertSame(3, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
     }
 
     private function createCatalogSchema(): void
@@ -153,6 +158,7 @@ class GamePlannerBuilderTest extends TestCase
             $table->id();
             $table->foreignId('result_item_id')->nullable();
             $table->boolean('is_historical')->default(false);
+            $table->json('raw_json')->nullable();
         });
         Schema::create('recipe_ingredients', function (Blueprint $table): void {
             $table->id();
@@ -164,6 +170,22 @@ class GamePlannerBuilderTest extends TestCase
         Schema::create('recipe_group_members', function (Blueprint $table): void {
             $table->unsignedBigInteger('recipe_group_id');
             $table->foreignId('item_id');
+        });
+        Schema::create('crafting_stations', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name');
+        });
+        Schema::create('recipe_stations', function (Blueprint $table): void {
+            $table->foreignId('recipe_id');
+            $table->foreignId('station_id');
+        });
+        Schema::create('recipe_conditions', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('recipe_id');
+            $table->string('condition_type')->nullable();
+            $table->string('condition_key')->nullable();
+            $table->text('description')->nullable();
+            $table->json('value_json')->nullable();
         });
     }
 
@@ -181,13 +203,14 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 8, 'mod_id' => 1, 'global_id' => 'terraria:conditional_blade', 'display_name' => 'Conditional Blade'],
             ['id' => 9, 'mod_id' => 1, 'global_id' => 'terraria:unresolved_boss_blade', 'display_name' => 'Unresolved Boss Blade'],
             ['id' => 10, 'mod_id' => 1, 'global_id' => 'terraria:unresolved_source_blade', 'display_name' => 'Unresolved Source Blade'],
+            ['id' => 11, 'mod_id' => 1, 'global_id' => 'terraria:hardmode_recipe_blade', 'display_name' => 'Hardmode Recipe Blade'],
         ]);
         DB::table('combat_classes')->insert(['id' => 1, 'class_key' => 'melee']);
         DB::table('item_combat_classes')->insert(array_map(
             static fn (int $itemId): array => ['item_id' => $itemId, 'combat_class_id' => 1],
-            [1, 2, 3, 5, 7, 8, 9, 10]
+            [1, 2, 3, 5, 7, 8, 9, 10, 11]
         ));
-        foreach ([[1, 10, 30], [2, 20, 25], [3, 40, 20], [5, 100, 10], [7, 80, 15], [8, 90, 15], [9, 120, 12], [10, 1000, 5]] as [$itemId, $damage, $useTime]) {
+        foreach ([[1, 10, 30], [2, 20, 25], [3, 40, 20], [5, 100, 10], [7, 80, 15], [8, 90, 15], [9, 120, 12], [10, 1000, 5], [11, 150, 10]] as [$itemId, $damage, $useTime]) {
             DB::table('item_stats')->insert([
                 ['item_id' => $itemId, 'stat_key' => 'damage', 'numeric_value' => $damage],
                 ['item_id' => $itemId, 'stat_key' => 'use_time', 'numeric_value' => $useTime],
@@ -211,10 +234,14 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 7, 'item_id' => 9, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Eye Boss', 'source_type' => 'npc', 'condition_text' => null],
             ['id' => 8, 'item_id' => 10, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Final Mystery', 'source_type' => 'npc', 'condition_text' => null],
         ]);
-        DB::table('recipes')->insert(['id' => 1, 'result_item_id' => 3, 'is_historical' => false]);
+        DB::table('recipes')->insert([
+            ['id' => 1, 'result_item_id' => 3, 'is_historical' => false, 'raw_json' => null],
+            ['id' => 2, 'result_item_id' => 11, 'is_historical' => false, 'raw_json' => '{"station":"Hardmode Anvil"}'],
+        ]);
         DB::table('recipe_ingredients')->insert([
             ['id' => 1, 'recipe_id' => 1, 'ingredient_item_id' => 2],
             ['id' => 2, 'recipe_id' => 1, 'ingredient_item_id' => 4],
+            ['id' => 3, 'recipe_id' => 2, 'ingredient_item_id' => 4],
         ]);
     }
 }
