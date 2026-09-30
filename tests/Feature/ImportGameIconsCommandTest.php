@@ -27,6 +27,13 @@ class ImportGameIconsCommandTest extends TestCase
             'internal_name' => 'TestItem',
             'raw_json' => json_encode(['source_file' => 'Items/TestItem.cs'], JSON_THROW_ON_ERROR),
         ]);
+        DB::table('items')->insert([
+            'mod_id' => $modId,
+            'global_id' => 'calamity:item-without-sprite',
+            'internal_name' => 'ItemWithoutSprite',
+            'display_name' => 'Item Without Sprite',
+            'raw_json' => json_encode(['source_file' => 'Items/ItemWithoutSprite.cs'], JSON_THROW_ON_ERROR),
+        ]);
 
         $png = base64_decode(
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg=='

@@ -75,9 +75,10 @@ class GameIconImporter
                 if ($localPath !== null && is_file($localPath)) {
                     $bytes = file_get_contents($localPath);
                     $sourceUrl = rtrim((string) config('game-data.icons.calamity_raw_base_url'), '/').'/'.$relativePath;
-                } elseif ($relativePath !== '') {
+                } elseif ($repository === null && $relativePath !== '') {
                     $sourceUrl = rtrim((string) config('game-data.icons.calamity_raw_base_url'), '/').'/'.$relativePath;
-                    $response = Http::withUserAgent('rechi-os-game-data/1.0')->timeout(20)->retry(2, 250)->get($sourceUrl);
+                    $response = Http::withUserAgent('rechi-os-game-data/1.0')->timeout(20)
+                        ->retry(2, 250, throw: false)->get($sourceUrl);
                     if ($response->successful()) {
                         $bytes = $response->body();
                     }
