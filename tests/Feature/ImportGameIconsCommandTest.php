@@ -103,6 +103,52 @@ class ImportGameIconsCommandTest extends TestCase
         ]);
     }
 
+    public function test_it_detects_vertical_animation_frames_from_the_official_source(): void
+    {
+        $this->createCatalogTables();
+        config()->set('game-data.icons.calamity_raw_base_url', 'https://raw.example.test/Calamity');
+
+        $modId = DB::table('mods')->insertGetId(['mod_key' => 'calamity']);
+        DB::table('items')->insert([
+            'mod_id' => $modId,
+            'global_id' => 'calamity:cryo_stone',
+            'internal_name' => 'CryoStone',
+            'display_name' => 'Cryo Stone',
+            'raw_json' => json_encode(['source_file' => 'Items/Accessories/CryoStone.cs'], JSON_THROW_ON_ERROR),
+        ]);
+        DB::table('game_item_assets')->insert([
+            'item_global_id' => 'calamity:cryo_stone',
+            'asset_type' => 'icon',
+            'variant' => 'default',
+            'disk' => 'public',
+            'path' => 'game-data/items/calamity/cryo_stone.png',
+            'mime_type' => 'image/png',
+            'width' => 38,
+            'height' => 128,
+            'source_type' => 'calamity_repository',
+            'status' => 'ready',
+            'metadata_json' => json_encode(['source_file' => 'Items/Accessories/CryoStone.cs'], JSON_THROW_ON_ERROR),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        Http::fake([
+            'raw.example.test/Calamity/Items/Accessories/CryoStone.cs' => Http::response(
+                'Main.RegisterItemAnimation(Item.type, new DrawAnimationVertical(4, 4));'
+            ),
+        ]);
+
+        $this->artisan('game-data:repair-icon-metadata')->assertSuccessful();
+
+        $metadata = DB::table('game_item_assets')->where('item_global_id', 'calamity:cryo_stone')
+            ->value('metadata_json');
+        $this->assertIsString($metadata);
+        $this->assertSame([
+            'source_file' => 'Items/Accessories/CryoStone.cs',
+            'frame_count' => 4,
+            'frame_height' => 32,
+        ], json_decode($metadata, true, 512, JSON_THROW_ON_ERROR));
+    }
+
     private function createCatalogTables(): void
     {
         Schema::create('mods', function (Blueprint $table): void {

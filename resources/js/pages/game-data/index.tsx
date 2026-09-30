@@ -30,6 +30,11 @@ type IconAsset = {
     url: string;
     width?: number;
     height?: number;
+    mime_type?: string;
+    metadata_json?: {
+        frame_count?: number;
+        frame_height?: number;
+    } | null;
 };
 
 type ItemSummary = {
@@ -264,6 +269,65 @@ function DetailRecords({
     );
 }
 
+function ItemSprite({
+    item,
+    displaySize,
+}: {
+    item: ItemSummary;
+    displaySize: number;
+}) {
+    const icon = item.icon;
+
+    if (!icon?.url) {
+        return <Boxes className="size-5 text-muted-foreground" />;
+    }
+
+    const sourceWidth = Number(icon.width ?? 0);
+    const sourceHeight = Number(icon.height ?? 0);
+    const metadataFrameHeight = Number(icon.metadata_json?.frame_height ?? 0);
+
+    if (sourceWidth <= 0 || sourceHeight <= 0) {
+        return (
+            <img
+                src={icon.url}
+                alt=""
+                className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
+                loading="lazy"
+            />
+        );
+    }
+
+    const frameHeight =
+        metadataFrameHeight > 0 && metadataFrameHeight <= sourceHeight
+            ? metadataFrameHeight
+            : sourceHeight;
+    const scale = Math.min(
+        1,
+        displaySize / sourceWidth,
+        displaySize / frameHeight,
+    );
+    const renderedWidth = sourceWidth * scale;
+    const renderedFrameHeight = frameHeight * scale;
+
+    return (
+        <span
+            className="block overflow-hidden"
+            style={{ width: renderedWidth, height: renderedFrameHeight }}
+        >
+            <img
+                src={icon.url}
+                alt=""
+                className="block max-w-none [image-rendering:pixelated]"
+                style={{
+                    width: renderedWidth,
+                    height: sourceHeight * scale,
+                }}
+                loading="lazy"
+            />
+        </span>
+    );
+}
+
 function ItemIcon({
     item,
     size = 'md',
@@ -277,16 +341,7 @@ function ItemIcon({
         <div
             className={`${classes} grid shrink-0 place-items-center rounded-md border border-border bg-black/20 p-1`}
         >
-            {item.icon?.url ? (
-                <img
-                    src={item.icon.url}
-                    alt=""
-                    className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
-                    loading="lazy"
-                />
-            ) : (
-                <Boxes className="size-5 text-muted-foreground" />
-            )}
+            <ItemSprite item={item} displaySize={size === 'sm' ? 28 : 40} />
         </div>
     );
 }
@@ -319,13 +374,8 @@ function BuildSlot({
                     } disabled:cursor-default disabled:border-[#3a344d] disabled:bg-[#171522]`}
                 >
                     <span className="grid size-12 shrink-0 place-items-center rounded border border-white/10 bg-[#0e0d18]/80 p-1">
-                        {item?.icon?.url ? (
-                            <img
-                                src={item.icon.url}
-                                alt=""
-                                className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
-                                loading="lazy"
-                            />
+                        {item ? (
+                            <ItemSprite item={item} displaySize={40} />
                         ) : (
                             <span className="size-5 rounded border border-dashed border-white/20" />
                         )}
