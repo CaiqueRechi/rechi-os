@@ -260,13 +260,13 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
-     * @return array<int, list<array{rank: int, type: string, confidence: string}>>
+     * @return array<int, list<array{rank: int, type: string, confidence: string, source_item_id: int|null}>>
      */
     private function loadDropMethods(array $bosses): array
     {
         $methods = [];
         foreach ($this->catalogDatabase()->table('drops')->whereNotNull('item_id')
-            ->get(['item_id', 'npc_id', 'source_type', 'condition_text', 'conditions_json']) as $drop) {
+            ->get(['item_id', 'npc_id', 'source_item_id', 'source_type', 'condition_text', 'conditions_json']) as $drop) {
             $row = (array) $drop;
             $rank = 0;
             $npcId = $row['npc_id'] === null ? null : (int) $row['npc_id'];
@@ -284,6 +284,7 @@ class GamePlannerBuilder
                 'rank' => $rank,
                 'type' => (string) $row['source_type'],
                 'confidence' => 'derived',
+                'source_item_id' => $row['source_item_id'] === null ? null : (int) $row['source_item_id'],
             ];
         }
 
@@ -338,7 +339,7 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array<string, mixed>>  $items
-     * @param  array<int, list<array{rank: int, type: string, confidence: string}>>  $dropMethods
+     * @param  array<int, list<array{rank: int, type: string, confidence: string, source_item_id: int|null}>>  $dropMethods
      * @param  array<int, list<list<list<int>>>>  $recipes
      * @return array<int, array{rank: int, type: string, confidence: string}>
      */
@@ -358,7 +359,17 @@ class GamePlannerBuilder
         for ($iteration = 0; $iteration < 30; $iteration++) {
             $changed = false;
             foreach ($items as $itemId => $item) {
-                $methods = $dropMethods[$itemId] ?? [];
+                $methods = [];
+                foreach ($dropMethods[$itemId] ?? [] as $dropMethod) {
+                    $sourceItemId = $dropMethod['source_item_id'];
+                    if ($sourceItemId !== null) {
+                        if (! isset($availability[$sourceItemId]) || $availability[$sourceItemId]['confidence'] === 'unknown') {
+                            continue;
+                        }
+                        $dropMethod['rank'] = max($dropMethod['rank'], $availability[$sourceItemId]['rank']);
+                    }
+                    $methods[] = $dropMethod;
+                }
                 foreach ($recipes[$itemId] ?? [] as $recipeIngredients) {
                     $ingredientRanks = [];
                     $known = true;
@@ -380,6 +391,7 @@ class GamePlannerBuilder
                             'rank' => max($ingredientRanks),
                             'type' => 'crafting',
                             'confidence' => 'derived',
+                            'source_item_id' => null,
                         ];
                     }
                 }
