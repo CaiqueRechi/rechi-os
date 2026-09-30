@@ -381,11 +381,9 @@ class GameCatalogService
             ])->groupBy('recipe_id');
         $stations = $db->table('recipe_stations as rs')
             ->join('crafting_stations as station', 'station.id', '=', 'rs.station_id')
-            ->leftJoin('items as station_item', 'station_item.id', '=', 'station.item_id')
             ->whereIn('rs.recipe_id', $recipeIds)->orderBy('station.name')
             ->get([
-                'rs.recipe_id', 'station.global_id', 'station.name', 'station.internal_name',
-                'station.unresolved_name', 'station_item.global_id as item_global_id',
+                'rs.recipe_id', 'station.station_key', 'station.name',
             ])->groupBy('recipe_id');
         $conditions = $db->table('recipe_conditions')->whereIn('recipe_id', $recipeIds)
             ->orderBy('id')->get()->groupBy('recipe_id');
