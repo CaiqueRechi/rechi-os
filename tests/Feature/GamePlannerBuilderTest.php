@@ -50,7 +50,7 @@ class GamePlannerBuilderTest extends TestCase
         $this->assertDatabaseHas('game_planners', [
             'planner_key' => 'melee-generated',
             'status' => 'published',
-            'version' => 'availability-power-v1',
+            'version' => 'availability-power-v2',
         ]);
         $this->assertDatabaseHas('game_planner_step_items', [
             'item_global_id' => 'terraria:copper_sword',
@@ -63,6 +63,17 @@ class GamePlannerBuilderTest extends TestCase
         $this->assertDatabaseMissing('game_planner_step_items', [
             'item_global_id' => 'terraria:unresolved_source_blade',
         ]);
+        foreach ([
+            'terraria:wood_helmet' => 'armor_head',
+            'terraria:wood_breastplate' => 'armor_body',
+            'terraria:wood_greaves' => 'armor_legs',
+            'terraria:running_charm' => 'accessory',
+        ] as $globalId => $slotType) {
+            $this->assertDatabaseHas('game_planner_step_items', [
+                'item_global_id' => $globalId,
+                'slot_type' => $slotType,
+            ]);
+        }
 
         $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
         $this->assertSame(3, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
@@ -205,6 +216,12 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 10, 'mod_id' => 1, 'global_id' => 'terraria:unresolved_source_blade', 'display_name' => 'Unresolved Source Blade'],
             ['id' => 11, 'mod_id' => 1, 'global_id' => 'terraria:hardmode_recipe_blade', 'display_name' => 'Hardmode Recipe Blade'],
         ]);
+        DB::table('items')->insert([
+            ['id' => 12, 'mod_id' => 1, 'global_id' => 'terraria:wood_helmet', 'display_name' => 'Wood Helmet', 'tooltip' => null],
+            ['id' => 13, 'mod_id' => 1, 'global_id' => 'terraria:wood_breastplate', 'display_name' => 'Wood Breastplate', 'tooltip' => null],
+            ['id' => 14, 'mod_id' => 1, 'global_id' => 'terraria:wood_greaves', 'display_name' => 'Wood Greaves', 'tooltip' => null],
+            ['id' => 15, 'mod_id' => 1, 'global_id' => 'terraria:running_charm', 'display_name' => 'Running Charm', 'tooltip' => '5% increased movement speed'],
+        ]);
         DB::table('combat_classes')->insert(['id' => 1, 'class_key' => 'melee']);
         DB::table('item_combat_classes')->insert(array_map(
             static fn (int $itemId): array => ['item_id' => $itemId, 'combat_class_id' => 1],
@@ -216,6 +233,28 @@ class GamePlannerBuilderTest extends TestCase
                 ['item_id' => $itemId, 'stat_key' => 'use_time', 'numeric_value' => $useTime],
             ]);
         }
+        foreach ([[12, 1], [13, 3], [14, 1]] as [$itemId, $defense]) {
+            DB::table('item_stats')->insert([
+                'item_id' => $itemId,
+                'stat_key' => 'defense',
+                'numeric_value' => $defense,
+            ]);
+        }
+        DB::table('categories')->insert([
+            ['id' => 1, 'category_key' => 'armor'],
+            ['id' => 2, 'category_key' => 'accessory'],
+        ]);
+        DB::table('item_categories')->insert([
+            ['item_id' => 12, 'category_id' => 1],
+            ['item_id' => 13, 'category_id' => 1],
+            ['item_id' => 14, 'category_id' => 1],
+            ['item_id' => 15, 'category_id' => 2],
+        ]);
+        DB::table('item_properties')->insert([
+            ['item_id' => 12, 'property_key' => 'bodyslot', 'text_value' => 'helmet'],
+            ['item_id' => 13, 'property_key' => 'bodyslot', 'text_value' => 'shirt'],
+            ['item_id' => 14, 'property_key' => 'bodyslot', 'text_value' => 'pants'],
+        ]);
 
         DB::table('npcs')->insert(['id' => 1, 'display_name' => 'Eye Boss']);
         DB::table('bosses')->insert(['id' => 1, 'npc_id' => 1]);
@@ -233,6 +272,10 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 6, 'item_id' => 8, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => 'Post-Eye Boss'],
             ['id' => 7, 'item_id' => 9, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Eye Boss', 'source_type' => 'npc', 'condition_text' => null],
             ['id' => 8, 'item_id' => 10, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Final Mystery', 'source_type' => 'npc', 'condition_text' => null],
+            ['id' => 9, 'item_id' => 12, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 10, 'item_id' => 13, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 11, 'item_id' => 14, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
+            ['id' => 12, 'item_id' => 15, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
         ]);
         DB::table('recipes')->insert([
             ['id' => 1, 'result_item_id' => 3, 'is_historical' => false, 'raw_json' => null],

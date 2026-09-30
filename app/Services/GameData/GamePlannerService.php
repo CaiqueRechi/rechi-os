@@ -14,6 +14,7 @@ class GamePlannerService
     public function __construct(
         private readonly GameAssetService $assets,
         private readonly GameDataCache $cache,
+        private readonly GameLoadoutAssembler $loadouts,
     ) {}
 
     /** @var list<string> */
@@ -174,6 +175,7 @@ class GamePlannerService
         $itemsByStep = $items->groupBy('step_id');
 
         $timeline = [];
+        $currentBuild = null;
         foreach ($steps as $step) {
             $stepData = (array) $step;
             $data = $this->decodeObject($step, ['metadata_json', 'requirements_json']);
@@ -185,6 +187,8 @@ class GamePlannerService
 
                 return $row;
             })->values()->all();
+            $currentBuild = $this->loadouts->assemble(array_values($data['items']), $currentBuild);
+            $data['build'] = $currentBuild;
             $timeline[] = $data;
         }
 
@@ -309,7 +313,7 @@ class GamePlannerService
                 $statData = (array) $stat;
 
                 return [(string) $statData['stat_key'] => $statData['numeric_value'] ?? $statData['text_value'] ?? $statData['raw_value']];
-            });
+            })->all();
             $row['icon'] = $assets[(string) $row['global_id']] ?? null;
             unset($row['id']);
 

@@ -9,7 +9,7 @@ use RuntimeException;
 
 class GamePlannerBuilder
 {
-    private const ALGORITHM_VERSION = 'availability-power-v1';
+    private const ALGORITHM_VERSION = 'availability-power-v2';
 
     private const MAX_PROGRESS_RANK = 3000;
 
@@ -746,7 +746,7 @@ class GamePlannerBuilder
             if ($role === null) {
                 continue;
             }
-            $matchesWeapon = array_intersect($classKeys, $item['classes']) !== []
+            $matchesArchetype = array_intersect($classKeys, $item['classes']) !== []
                 || array_intersect($categoryKeys, $item['categories']) !== []
                 || array_intersect($propertyKeys, array_keys(array_filter(
                     $item['properties'],
@@ -754,13 +754,18 @@ class GamePlannerBuilder
                 ))) !== [];
             $tooltip = strtolower((string) ($item['tooltip'] ?? '').' '.(string) ($item['description'] ?? ''));
             $supportsClass = $role !== 'weapon' && $this->supportsClass($tooltip, $keyword);
+            $isEquipment = $role !== 'weapon';
+            $belongsToAnotherClass = $isEquipment && $item['classes'] !== [] && ! $matchesArchetype;
 
-            if (! $matchesWeapon && ! $supportsClass) {
+            if ((! $isEquipment && ! $matchesArchetype) || $belongsToAnotherClass) {
                 continue;
             }
             $score = $this->powerScore($item, $role, (string) ($metadata['playstyle'] ?? ''));
             if ($score <= 0) {
                 continue;
+            }
+            if ($isEquipment) {
+                $score *= $matchesArchetype || $supportsClass ? 1.2 : 0.9;
             }
             if ($availability[$itemId]['confidence'] === 'unknown') {
                 continue;
