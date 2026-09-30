@@ -34,12 +34,22 @@ class ImportGameIconsCommandTest extends TestCase
             'display_name' => 'Item Without Sprite',
             'raw_json' => json_encode(['source_file' => 'Items/ItemWithoutSprite.cs'], JSON_THROW_ON_ERROR),
         ]);
+        DB::table('items')->insert([
+            'mod_id' => $modId,
+            'global_id' => 'calamity:animated-item',
+            'internal_name' => 'AnimatedItem',
+            'display_name' => 'Animated Item',
+            'raw_json' => json_encode(['source_file' => 'Items/AnimatedItem.cs'], JSON_THROW_ON_ERROR),
+        ]);
 
         $png = base64_decode(
             'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9WQAAAABJRU5ErkJggg=='
         );
         $this->assertIsString($png);
         Storage::disk('public')->put('source/Items/TestItem.png', $png);
+        $gif = base64_decode('R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==');
+        $this->assertIsString($gif);
+        Storage::disk('public')->put('source/Items/AnimatedItem.png', $gif);
 
         $this->artisan('game-data:import-icons', [
             '--mod' => 'calamity',
@@ -53,6 +63,7 @@ class ImportGameIconsCommandTest extends TestCase
             'height' => 1,
         ]);
         Storage::disk('public')->assertExists('game-data/items/calamity/test-item.png');
+        Storage::disk('public')->assertExists('game-data/items/calamity/animated-item.gif');
     }
 
     public function test_it_uses_the_vanilla_mod_key_for_terraria_wiki_icons(): void
