@@ -1,0 +1,50 @@
+{
+  "track": {
+    "key": "terraria-calamity-auto-v1",
+    "game_key": "terraria",
+    "name": "Terraria + Calamity — generated timeline",
+    "game_version": "1.4.4",
+    "mod_versions": {"calamity": "2.2.2"},
+    "difficulty": "any",
+    "active": true,
+    "metadata": {
+      "algorithm": "availability-power-v1",
+      "source_revision": "1a8cebd27ec5615316b78f71973446b5528d2b78",
+      "tiers_per_phase": 6,
+      "recommendations_per_slot": 5,
+      "minimum_upgrade_percent": 8,
+      "notes": "Milestones and recommendations are generated from acquisition dependencies, explicit game-state flags and item statistics."
+    }
+  },
+  "milestones": [],
+  "archetypes": [
+    {"key": "melee", "name": "Melee", "kind": "class", "damage_class_key": "melee", "order": 100, "metadata": {"combat_class_keys": ["melee"]}},
+    {"key": "melee-true", "name": "True Melee", "kind": "subclass", "parent": "melee", "damage_class_key": "true_melee_damage_class_instance", "order": 110, "metadata": {"combat_class_keys": ["true_melee_damage_class_instance", "true_melee_no_speed_damage_class_instance"]}},
+    {"key": "melee-swords", "name": "Swords", "kind": "subclass", "parent": "melee", "order": 120, "metadata": {"category_keys": ["broadswords", "shortswords"]}},
+    {"key": "melee-spears", "name": "Spears", "kind": "subclass", "parent": "melee", "order": 130, "metadata": {"category_keys": ["spears"]}},
+    {"key": "melee-yoyos", "name": "Yoyos", "kind": "subclass", "parent": "melee", "order": 140, "metadata": {"category_keys": ["yoyos"]}},
+    {"key": "melee-boomerangs", "name": "Boomerangs", "kind": "subclass", "parent": "melee", "order": 150, "metadata": {"category_keys": ["boomerangs"]}},
+    {"key": "melee-flails", "name": "Flails", "kind": "subclass", "parent": "melee", "order": 160, "metadata": {"category_keys": ["flails"]}},
+    {"key": "ranged", "name": "Ranged", "kind": "class", "damage_class_key": "ranged", "order": 200, "metadata": {"combat_class_keys": ["ranged"]}},
+    {"key": "ranged-bows", "name": "Bows", "kind": "subclass", "parent": "ranged", "order": 210, "metadata": {"category_keys": ["bows"]}},
+    {"key": "ranged-guns", "name": "Guns", "kind": "subclass", "parent": "ranged", "order": 220, "metadata": {"category_keys": ["guns"]}},
+    {"key": "ranged-launchers", "name": "Launchers", "kind": "subclass", "parent": "ranged", "order": 230, "metadata": {"category_keys": ["launchers"]}},
+    {"key": "ranged-flamethrowers", "name": "Flamethrowers", "kind": "subclass", "parent": "ranged", "order": 240, "metadata": {"category_keys": ["flamethrowers"]}},
+    {"key": "magic", "name": "Magic", "kind": "class", "damage_class_key": "magic", "order": 300, "metadata": {"combat_class_keys": ["magic"]}},
+    {"key": "magic-wands", "name": "Wands and Staffs", "kind": "subclass", "parent": "magic", "order": 310, "metadata": {"category_keys": ["wands", "magic_staffs"]}},
+    {"key": "magic-spellbooks", "name": "Spellbooks", "kind": "subclass", "parent": "magic", "order": 320, "metadata": {"category_keys": ["spellbooks"]}},
+    {"key": "magic-guns", "name": "Magic Guns", "kind": "subclass", "parent": "magic", "order": 330, "metadata": {"category_keys": ["magic_guns"]}},
+    {"key": "magic-channelled", "name": "Channelled Magic", "kind": "subclass", "parent": "magic", "order": 340, "metadata": {"property_keys": ["channel"]}},
+    {"key": "summon", "name": "Summoner", "kind": "class", "damage_class_key": "summon", "order": 400, "metadata": {"combat_class_keys": ["summon"]}},
+    {"key": "summon-minions", "name": "Minions", "kind": "subclass", "parent": "summon", "order": 410, "metadata": {"category_keys": ["summon_weapons", "minion_summon_items"]}},
+    {"key": "summon-sentries", "name": "Sentries", "kind": "subclass", "parent": "summon", "order": 420, "metadata": {"category_keys": ["sentry_summon_items", "sentries"]}},
+    {"key": "summon-whips", "name": "Whips", "kind": "subclass", "parent": "summon", "order": 430, "metadata": {"category_keys": ["whips"]}},
+    {"key": "rogue", "name": "Rogue", "kind": "class", "mod_key": "calamity", "damage_class_key": "rogue", "order": 500, "metadata": {"combat_class_keys": ["rogue"]}},
+    {"key": "rogue-stealth", "name": "Stealth Strike", "kind": "subclass", "parent": "rogue", "mod_key": "calamity", "order": 510, "metadata": {"combat_class_keys": ["rogue"], "playstyle": "stealth"}},
+    {"key": "rogue-spam", "name": "Attack-Speed Rogue", "kind": "subclass", "parent": "rogue", "mod_key": "calamity", "order": 520, "metadata": {"combat_class_keys": ["rogue"], "playstyle": "spam"}},
+    {"key": "hybrid", "name": "Hybrid / Classless", "kind": "class", "order": 600, "metadata": {"combat_class_keys": ["all_class_damage_class_instance", "average_damage_class_instance", "melee_ranged_hybrid_damage_class_instance"]}}
+  ],
+  "item_archetypes": [],
+  "availability": [],
+  "planners": []
+}

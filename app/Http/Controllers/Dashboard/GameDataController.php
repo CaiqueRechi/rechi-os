@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Dashboard;
 
 use App\Http\Controllers\Controller;
 use App\Services\GameData\GameCatalogService;
+use App\Services\GameData\GamePlannerService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -85,9 +86,78 @@ class GameDataController extends Controller
         return $npc ? response()->json(['data' => $npc]) : response()->json(['message' => 'NPC not found.'], 404);
     }
 
+    public function archetypes(GamePlannerService $planners): JsonResponse
+    {
+        return $planners->isReady()
+            ? response()->json(['data' => $planners->archetypes()])
+            : $this->plannerUnavailable();
+    }
+
+    public function progression(GamePlannerService $planners): JsonResponse
+    {
+        return $planners->isReady()
+            ? response()->json(['data' => $planners->tracks()])
+            : $this->plannerUnavailable();
+    }
+
+    public function archetypeItems(
+        string $archetypeKey,
+        Request $request,
+        GameCatalogService $catalog,
+        GamePlannerService $planners,
+    ): JsonResponse {
+        if (! $catalog->isReady()) {
+            return $this->unavailable();
+        }
+
+        if (! $planners->isReady()) {
+            return $this->plannerUnavailable();
+        }
+
+        $filters = $request->validate([
+            'q' => ['nullable', 'string', 'max:255'],
+            'mod' => ['nullable', 'string', 'max:128'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+        $items = $planners->candidates($archetypeKey, $filters);
+
+        return $items ? $this->paginated($items) : response()->json(['message' => 'Class or subclass not found.'], 404);
+    }
+
+    public function planners(Request $request, GamePlannerService $planners): JsonResponse
+    {
+        if (! $planners->isReady()) {
+            return $this->plannerUnavailable();
+        }
+
+        $filters = $request->validate([
+            'status' => ['nullable', 'in:draft,published,archived'],
+            'track' => ['nullable', 'string', 'max:128'],
+            'archetype' => ['nullable', 'string', 'max:128'],
+        ]);
+
+        return response()->json(['data' => $planners->planners($filters)]);
+    }
+
+    public function planner(string $plannerKey, GamePlannerService $planners): JsonResponse
+    {
+        if (! $planners->isReady()) {
+            return $this->plannerUnavailable();
+        }
+
+        $planner = $planners->planner($plannerKey);
+
+        return $planner ? response()->json(['data' => $planner]) : response()->json(['message' => 'Planner not found.'], 404);
+    }
+
     private function unavailable(): JsonResponse
     {
         return response()->json(['message' => 'The game dataset is not installed.', 'code' => 'game_dataset_unavailable'], 503);
+    }
+
+    private function plannerUnavailable(): JsonResponse
+    {
+        return response()->json(['message' => 'The game planner is not installed.', 'code' => 'game_planner_unavailable'], 503);
     }
 
     /** @param LengthAwarePaginator<int, object> $paginator */

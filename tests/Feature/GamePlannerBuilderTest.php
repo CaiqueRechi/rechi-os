@@ -1,0 +1,195 @@
+<?php
+
+namespace Tests\Feature;
+
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Tests\TestCase;
+
+class GamePlannerBuilderTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_it_derives_a_timeline_from_acquisition_dependencies_and_power_changes(): void
+    {
+        $this->createCatalogSchema();
+        $this->seedLogicalProgressionFixture();
+
+        $this->artisan('game-data:build-planners')->assertSuccessful();
+
+        $this->assertDatabaseHas('game_progression_tracks', [
+            'track_key' => 'terraria-calamity-auto-v1',
+        ]);
+        $this->assertDatabaseHas('game_item_availability', [
+            'item_global_id' => 'terraria:forged_blade',
+            'availability_type' => 'crafting',
+            'confidence' => 'derived',
+        ]);
+        $this->assertDatabaseHas('game_planners', [
+            'planner_key' => 'melee-generated',
+            'status' => 'published',
+            'version' => 'availability-power-v1',
+        ]);
+        $this->assertDatabaseHas('game_planner_step_items', [
+            'item_global_id' => 'terraria:copper_sword',
+            'slot_type' => 'weapon',
+            'recommendation_tier' => 'core',
+        ]);
+        $this->assertDatabaseHas('game_planner_step_items', [
+            'item_global_id' => 'terraria:forged_blade',
+            'slot_type' => 'weapon',
+            'recommendation_tier' => 'core',
+        ]);
+        $this->assertDatabaseMissing('game_planner_step_items', [
+            'item_global_id' => 'terraria:unobtainable_blade',
+        ]);
+
+        $meleePlannerId = DB::table('game_planners')->where('planner_key', 'melee-generated')->value('id');
+        $this->assertSame(2, DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count());
+    }
+
+    private function createCatalogSchema(): void
+    {
+        Schema::create('mods', function (Blueprint $table): void {
+            $table->id();
+            $table->string('mod_key');
+        });
+        Schema::create('items', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('mod_id');
+            $table->string('global_id');
+            $table->string('display_name');
+            $table->text('tooltip')->nullable();
+            $table->text('description')->nullable();
+            $table->string('rarity_text')->nullable();
+            $table->json('raw_json')->nullable();
+        });
+        Schema::create('item_stats', function (Blueprint $table): void {
+            $table->foreignId('item_id');
+            $table->string('stat_key');
+            $table->decimal('numeric_value', 18, 6)->nullable();
+            $table->text('text_value')->nullable();
+            $table->text('raw_value')->nullable();
+        });
+        Schema::create('item_properties', function (Blueprint $table): void {
+            $table->foreignId('item_id');
+            $table->string('property_key');
+            $table->boolean('boolean_value')->nullable();
+            $table->decimal('numeric_value', 18, 6)->nullable();
+            $table->text('text_value')->nullable();
+            $table->text('raw_value')->nullable();
+        });
+        Schema::create('categories', function (Blueprint $table): void {
+            $table->id();
+            $table->string('category_key');
+        });
+        Schema::create('item_categories', function (Blueprint $table): void {
+            $table->foreignId('item_id');
+            $table->foreignId('category_id');
+        });
+        Schema::create('combat_classes', function (Blueprint $table): void {
+            $table->id();
+            $table->string('class_key');
+        });
+        Schema::create('item_combat_classes', function (Blueprint $table): void {
+            $table->foreignId('item_id');
+            $table->foreignId('combat_class_id');
+        });
+        Schema::create('tags', function (Blueprint $table): void {
+            $table->id();
+            $table->string('tag_key');
+        });
+        Schema::create('item_tags', function (Blueprint $table): void {
+            $table->foreignId('item_id');
+            $table->foreignId('tag_id');
+        });
+        Schema::create('progression_stages', function (Blueprint $table): void {
+            $table->id();
+            $table->integer('sort_order');
+        });
+        Schema::create('item_progression', function (Blueprint $table): void {
+            $table->foreignId('item_id');
+            $table->foreignId('progression_stage_id');
+        });
+        Schema::create('npcs', function (Blueprint $table): void {
+            $table->id();
+            $table->string('display_name');
+        });
+        Schema::create('npc_stats', function (Blueprint $table): void {
+            $table->foreignId('npc_id');
+            $table->string('stat_key');
+            $table->decimal('numeric_value', 18, 6)->nullable();
+        });
+        Schema::create('bosses', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('npc_id');
+        });
+        Schema::create('drops', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('item_id')->nullable();
+            $table->foreignId('npc_id')->nullable();
+            $table->string('source_type');
+            $table->text('condition_text')->nullable();
+            $table->json('conditions_json')->nullable();
+        });
+        Schema::create('recipes', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('result_item_id')->nullable();
+            $table->boolean('is_historical')->default(false);
+        });
+        Schema::create('recipe_ingredients', function (Blueprint $table): void {
+            $table->id();
+            $table->foreignId('recipe_id');
+            $table->foreignId('ingredient_item_id')->nullable();
+            $table->unsignedBigInteger('recipe_group_id')->nullable();
+            $table->string('unresolved_name')->nullable();
+        });
+        Schema::create('recipe_group_members', function (Blueprint $table): void {
+            $table->unsignedBigInteger('recipe_group_id');
+            $table->foreignId('item_id');
+        });
+    }
+
+    private function seedLogicalProgressionFixture(): void
+    {
+        DB::table('mods')->insert(['id' => 1, 'mod_key' => 'terraria']);
+        DB::table('items')->insert([
+            ['id' => 1, 'mod_id' => 1, 'global_id' => 'terraria:copper_sword', 'display_name' => 'Copper Sword'],
+            ['id' => 2, 'mod_id' => 1, 'global_id' => 'terraria:eye_blade', 'display_name' => 'Eye Blade'],
+            ['id' => 3, 'mod_id' => 1, 'global_id' => 'terraria:forged_blade', 'display_name' => 'Forged Blade'],
+            ['id' => 4, 'mod_id' => 1, 'global_id' => 'terraria:demon_ore', 'display_name' => 'Demon Ore'],
+            ['id' => 5, 'mod_id' => 1, 'global_id' => 'terraria:unobtainable_blade', 'display_name' => 'Unobtainable Blade'],
+        ]);
+        DB::table('combat_classes')->insert(['id' => 1, 'class_key' => 'melee']);
+        DB::table('item_combat_classes')->insert(array_map(
+            static fn (int $itemId): array => ['item_id' => $itemId, 'combat_class_id' => 1],
+            [1, 2, 3, 5]
+        ));
+        foreach ([[1, 10, 30], [2, 20, 25], [3, 40, 20], [5, 100, 10]] as [$itemId, $damage, $useTime]) {
+            DB::table('item_stats')->insert([
+                ['item_id' => $itemId, 'stat_key' => 'damage', 'numeric_value' => $damage],
+                ['item_id' => $itemId, 'stat_key' => 'use_time', 'numeric_value' => $useTime],
+            ]);
+        }
+
+        DB::table('npcs')->insert(['id' => 1, 'display_name' => 'Eye Boss']);
+        DB::table('bosses')->insert(['id' => 1, 'npc_id' => 1]);
+        DB::table('npc_stats')->insert([
+            ['npc_id' => 1, 'stat_key' => 'life', 'numeric_value' => 1000],
+            ['npc_id' => 1, 'stat_key' => 'damage', 'numeric_value' => 20],
+            ['npc_id' => 1, 'stat_key' => 'defense', 'numeric_value' => 10],
+        ]);
+        DB::table('drops')->insert([
+            ['id' => 1, 'item_id' => 1, 'npc_id' => null, 'source_type' => 'world'],
+            ['id' => 2, 'item_id' => 2, 'npc_id' => 1, 'source_type' => 'npc_drop'],
+            ['id' => 3, 'item_id' => 4, 'npc_id' => null, 'source_type' => 'world'],
+        ]);
+        DB::table('recipes')->insert(['id' => 1, 'result_item_id' => 3, 'is_historical' => false]);
+        DB::table('recipe_ingredients')->insert([
+            ['id' => 1, 'recipe_id' => 1, 'ingredient_item_id' => 2],
+            ['id' => 2, 'recipe_id' => 1, 'ingredient_item_id' => 4],
+        ]);
+    }
+}

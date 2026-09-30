@@ -30,6 +30,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
             Route::get('/recipes', 'recipes')->name('recipes.index');
             Route::get('/npcs', 'npcs')->name('npcs.index');
             Route::get('/npcs/{globalId}', 'npc')->name('npcs.show');
+            Route::get('/classes', 'archetypes')->name('classes.index');
+            Route::get('/classes/{archetypeKey}/items', 'archetypeItems')->name('classes.items');
+            Route::get('/progression', 'progression')->name('progression.index');
+            Route::get('/planners', 'planners')->name('planners.index');
+            Route::get('/planners/{plannerKey}', 'planner')->name('planners.show');
         });
 });
 

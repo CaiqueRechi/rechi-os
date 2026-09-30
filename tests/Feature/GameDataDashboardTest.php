@@ -27,4 +27,23 @@ class GameDataDashboardTest extends TestCase
         $this->actingAs($admin)->getJson('/dashboard/game-data')
             ->assertStatus(503)->assertJsonPath('code', 'game_dataset_unavailable');
     }
+
+    public function test_admin_can_query_versioned_class_definitions_before_the_catalog_is_installed(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true, 'email_verified_at' => now()]);
+
+        $this->artisan('game-data:import-planners')->assertSuccessful();
+
+        $this->actingAs($admin)->getJson('/dashboard/game-data/classes')
+            ->assertOk()
+            ->assertJsonCount(25, 'data')
+            ->assertJsonPath('data.0.archetype_key', 'melee');
+        $this->actingAs($admin)->getJson('/dashboard/game-data/progression')
+            ->assertOk()
+            ->assertJsonPath('data.0.track_key', 'terraria-calamity-auto-v1')
+            ->assertJsonCount(0, 'data.0.milestones');
+        $this->actingAs($admin)->getJson('/dashboard/game-data/classes/melee/items')
+            ->assertStatus(503)
+            ->assertJsonPath('code', 'game_dataset_unavailable');
+    }
 }
