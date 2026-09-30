@@ -11,6 +11,11 @@ use stdClass;
 
 class GamePlannerService
 {
+    public function __construct(
+        private readonly GameAssetService $assets,
+        private readonly GameDataCache $cache,
+    ) {}
+
     /** @var list<string> */
     private const REQUIRED_TABLES = [
         'game_progression_tracks',
@@ -35,6 +40,12 @@ class GamePlannerService
     /** @return array<int, array<string, mixed>> */
     public function archetypes(): array
     {
+        return $this->cache->remember('planner:archetypes', fn (): array => $this->loadArchetypes());
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function loadArchetypes(): array
+    {
         $rows = DB::table('game_build_archetypes as a')
             ->leftJoin('game_build_archetypes as parent', 'parent.id', '=', 'a.parent_id')
             ->select([
@@ -53,6 +64,12 @@ class GamePlannerService
 
     /** @return array<int, non-empty-array<string, mixed>> */
     public function tracks(): array
+    {
+        return $this->cache->remember('planner:tracks', fn (): array => $this->loadTracks());
+    }
+
+    /** @return array<int, non-empty-array<string, mixed>> */
+    private function loadTracks(): array
     {
         return DB::table('game_progression_tracks')->where('is_active', true)->orderBy('name')->get()
             ->map(function (stdClass $track): array {
@@ -74,6 +91,17 @@ class GamePlannerService
      * @return array<int, array<string, mixed>>
      */
     public function planners(array $filters = []): array
+    {
+        $cacheKey = 'planner:list:'.sha1((string) json_encode($filters, JSON_THROW_ON_ERROR));
+
+        return $this->cache->remember($cacheKey, fn (): array => $this->loadPlanners($filters));
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<int, array<string, mixed>>
+     */
+    private function loadPlanners(array $filters): array
     {
         $query = DB::table('game_planners as p')
             ->join('game_progression_tracks as t', 't.id', '=', 'p.track_id')
@@ -103,6 +131,15 @@ class GamePlannerService
 
     /** @return array<string, mixed>|null */
     public function planner(string $plannerKey): ?array
+    {
+        return $this->cache->remember(
+            'planner:detail:'.sha1($plannerKey),
+            fn (): ?array => $this->loadPlanner($plannerKey)
+        );
+    }
+
+    /** @return array<string, mixed>|null */
+    private function loadPlanner(string $plannerKey): ?array
     {
         $planner = DB::table('game_planners as p')
             ->join('game_progression_tracks as t', 't.id', '=', 'p.track_id')
@@ -260,7 +297,12 @@ class GamePlannerService
             ->whereIn('stat_key', ['damage', 'defense', 'critical_chance', 'knockback', 'use_time', 'mana_cost'])
             ->orderBy('stat_key')->get()->groupBy('item_id');
 
-        return $items->mapWithKeys(function (stdClass $item) use ($stats): array {
+        $globalIds = array_values($items->pluck('global_id')->map(
+            static fn (mixed $id): string => (string) $id
+        )->all());
+        $assets = $this->assets->forItems($globalIds);
+
+        return $items->mapWithKeys(function (stdClass $item) use ($stats, $assets): array {
             $row = (array) $item;
             $itemStats = $stats->get($row['id'], collect());
             $row['stats'] = $itemStats->mapWithKeys(static function (stdClass $stat): array {
@@ -268,6 +310,7 @@ class GamePlannerService
 
                 return [(string) $statData['stat_key'] => $statData['numeric_value'] ?? $statData['text_value'] ?? $statData['raw_value']];
             });
+            $row['icon'] = $assets[(string) $row['global_id']] ?? null;
             unset($row['id']);
 
             return [(string) $row['global_id'] => $row];

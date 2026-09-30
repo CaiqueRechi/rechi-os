@@ -17,8 +17,10 @@ class GameCatalogService
 
     private readonly string $connectionName;
 
-    public function __construct()
-    {
+    public function __construct(
+        private readonly GameAssetService $assets,
+        private readonly GameDataCache $cache,
+    ) {
         $this->connectionName = (string) config('game-data.connection', config('database.default'));
     }
 
@@ -37,6 +39,12 @@ class GameCatalogService
 
     /** @return array<string, mixed> */
     public function overview(): array
+    {
+        return $this->cache->remember('catalog:overview', fn (): array => $this->loadOverview());
+    }
+
+    /** @return array<string, mixed> */
+    private function loadOverview(): array
     {
         $db = $this->database();
         $games = $db->table('games as g')
@@ -66,6 +74,7 @@ class GameCatalogService
                 'npcs' => $db->table('npcs')->count(),
                 'recipes' => $db->table('recipes')->count(),
                 'drops' => $db->table('drops')->count(),
+                'icons' => $this->assets->isReady() ? DB::table('game_item_assets')->where('status', 'ready')->count() : 0,
             ],
         ];
     }
@@ -90,7 +99,19 @@ class GameCatalogService
         $sort = $sorts[(string) ($filters['sort'] ?? 'name')] ?? $sorts['name'];
         $direction = ($filters['direction'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
 
-        return $query->orderBy($sort, $direction)->orderBy('i.id')->paginate($this->perPage($filters));
+        $paginator = $query->orderBy($sort, $direction)->orderBy('i.id')->paginate($this->perPage($filters));
+        $globalIds = array_values(collect($paginator->items())->map(
+            static fn (object $item): string => (string) ((array) $item)['global_id']
+        )->all());
+        $assets = $this->assets->forItems($globalIds);
+        $paginator->setCollection(collect($paginator->items())->map(static function (object $item) use ($assets): object {
+            $row = (array) $item;
+            $row['icon'] = $assets[(string) $row['global_id']] ?? null;
+
+            return (object) $row;
+        }));
+
+        return $paginator;
     }
 
     /** @return array<string, mixed>|null */
@@ -118,6 +139,7 @@ class GameCatalogService
 
         return [
             'item' => $this->objectWithDecodedJson($item, ['raw_json']),
+            'icon' => $this->assets->forItem((string) $item->global_id),
             'stats' => $stats,
             'stats_map' => $stats->mapWithKeys(static function (stdClass $stat): array {
                 $value = $stat->numeric_value ?? $stat->text_value ?? $stat->raw_value;

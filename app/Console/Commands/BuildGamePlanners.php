@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\GameData\GameDataCache;
 use App\Services\GameData\GamePlannerBuilder;
 use App\Services\GameData\GamePlannerDefinitionImporter;
 use Illuminate\Console\Attributes\Description;
@@ -13,13 +14,17 @@ use Throwable;
 #[Description('Generate game planner timelines from catalog facts and scoring rules')]
 class BuildGamePlanners extends Command
 {
-    public function handle(GamePlannerDefinitionImporter $importer, GamePlannerBuilder $builder): int
-    {
+    public function handle(
+        GamePlannerDefinitionImporter $importer,
+        GamePlannerBuilder $builder,
+        GameDataCache $cache,
+    ): int {
         $path = (string) ($this->option('definitions') ?: config('game-data.planner_definitions_path'));
 
         try {
             $importer->import($path, true);
             $result = $builder->build((string) $this->option('track'));
+            $cache->bump();
         } catch (Throwable $exception) {
             $this->error($exception->getMessage());
 

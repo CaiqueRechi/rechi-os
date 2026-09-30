@@ -2,6 +2,8 @@
 
 The protected game catalog lives under `/dashboard/game-data` and requires an
 authenticated, verified administrator with the `managePortfolio` ability.
+The first usable interface is available at `/dashboard/game-planner`; it uses
+the same protected JSON endpoints and never duplicates planner logic in React.
 
 ## Routes
 
@@ -23,6 +25,26 @@ connection. It can move to a dedicated database without changing routes.
 
 The dataset is generated offline and imported from
 `terraria_dataset_mariadb.sql`; normal web requests never fetch Wiki/GitHub data.
+
+## Item icons
+
+Icon binaries live on the configured Laravel filesystem disk (normally
+`storage/app/public/game-data/items`). The database stores only the item link,
+path, dimensions, byte size, SHA-256, source and source revision. This keeps the
+catalog database small while retaining traceability and duplicate detection.
+
+Calamity icons are read from an official `CalamityModPublic` checkout. Vanilla
+Terraria icons are resolved through the official Terraria Wiki API:
+
+```shell
+php artisan storage:link
+php artisan game-data:import-icons --mod=calamity --calamity-repository=/path/to/CalamityModPublic
+php artisan game-data:import-icons --mod=terraria
+```
+
+The importer is idempotent: ready files are skipped unless `--force` is passed.
+Use `--limit` for a smoke test and `--dry-run` to verify source availability
+without writing files or metadata.
 
 ## Generated timelines
 
@@ -57,3 +79,22 @@ Every derived row records its algorithm version, score/rank and confidence. Item
 whose acquisition cannot be established remain queryable in the catalog but are
 excluded from generated recommendations. Re-running the command is deterministic
 for the same dataset and replaces only generated data for the selected track.
+
+## Operations
+
+After replacing the catalog, normalize its explicit version metadata, rebuild
+the derived planners, import icons and verify coverage:
+
+```shell
+php artisan game-data:normalize-versions
+php artisan game-data:build-planners
+php artisan game-data:import-icons --mod=all --calamity-repository=/path/to/CalamityModPublic
+php artisan game-data:audit
+php artisan game-data:snapshot-planners
+```
+
+Planner lists, timelines and catalog totals are cached for
+`GAME_DATA_CACHE_TTL` seconds. Commands that change definitions, generated
+planners, versions or icons rotate the cache revision automatically. Planner
+snapshots are written to `storage/app/private/game-data/snapshots` by default
+and should be included in the normal server backup policy.

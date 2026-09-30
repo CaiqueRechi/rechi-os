@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\GameData\GameDataCache;
 use App\Services\GameData\GamePlannerDefinitionImporter;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -12,12 +13,13 @@ use Throwable;
 #[Description('Import versioned progression, class and planner definitions')]
 class ImportGamePlannerDefinitions extends Command
 {
-    public function handle(GamePlannerDefinitionImporter $importer): int
+    public function handle(GamePlannerDefinitionImporter $importer, GameDataCache $cache): int
     {
         $path = (string) ($this->argument('path') ?: config('game-data.planner_definitions_path'));
 
         try {
             $result = $importer->import($path, (bool) $this->option('replace'));
+            $cache->bump();
         } catch (Throwable $exception) {
             $this->error($exception->getMessage());
 
