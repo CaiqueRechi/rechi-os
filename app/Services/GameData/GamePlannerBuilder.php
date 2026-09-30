@@ -954,10 +954,6 @@ class GamePlannerBuilder
             }
             unset($roleCandidates);
 
-            if ($byRole === []) {
-                continue;
-            }
-
             $stepId = (int) DB::table('game_planner_steps')->insertGetId([
                 'planner_id' => $plannerId,
                 'milestone_id' => $milestoneIds[$milestone['key']],
