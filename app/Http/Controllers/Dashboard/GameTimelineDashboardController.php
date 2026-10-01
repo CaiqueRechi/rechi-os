@@ -6,10 +6,10 @@ use App\Http\Controllers\Controller;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class GamePlannerDashboardController extends Controller
+class GameTimelineDashboardController extends Controller
 {
     public function __invoke(): Response
     {
-        return Inertia::render('game-data/planner');
+        return Inertia::render('game-data/timeline');
     }
 }
