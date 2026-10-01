@@ -2,6 +2,9 @@ import { Head } from '@inertiajs/react';
 import {
     Boxes,
     Calculator,
+    ChevronLeft,
+    ChevronRight,
+    Filter,
     LoaderCircle,
     Plus,
     RotateCcw,
@@ -36,6 +39,18 @@ type ItemSummary = {
     stats?: Record<string, number | string | null>;
     icon?: IconAsset | null;
 };
+
+type PaginationMeta = {
+    current_page: number;
+    from: number | null;
+    last_page: number;
+    per_page: number;
+    to: number | null;
+    total: number;
+};
+
+type ItemSource = 'all' | 'vanilla' | 'calamity';
+type ItemOrder = 'name-asc' | 'name-desc' | 'rarity-asc' | 'rarity-desc';
 
 type SlotKey =
     | 'weapon'
@@ -261,6 +276,18 @@ export default function GameBuildPlanner() {
     const [results, setResults] = useState<ItemSummary[]>([]);
     const [searching, setSearching] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(24);
+    const [source, setSource] = useState<ItemSource>('all');
+    const [order, setOrder] = useState<ItemOrder>('name-asc');
+    const [pagination, setPagination] = useState<PaginationMeta>({
+        current_page: 1,
+        from: null,
+        last_page: 1,
+        per_page: 24,
+        to: null,
+        total: 0,
+    });
     const [accessoryReforges, setAccessoryReforges] = useState<
         Record<string, ReforgeKey>
     >({
@@ -283,9 +310,19 @@ export default function GameBuildPlanner() {
             const slot = activeSlot.startsWith('accessory')
                 ? 'accessory'
                 : activeSlot;
-            const params = new URLSearchParams({ slot, per_page: '40' });
+            const [sort, direction] = order.split('-');
+            const params = new URLSearchParams({
+                slot,
+                page: String(page),
+                per_page: String(pageSize),
+                sort,
+                direction,
+            });
             if (query.trim()) {
                 params.set('q', query.trim());
+            }
+            if (source !== 'all') {
+                params.set('mod', source);
             }
 
             try {
@@ -299,12 +336,16 @@ export default function GameBuildPlanner() {
                 );
                 const payload = (await response.json()) as {
                     data?: ItemSummary[];
+                    meta?: PaginationMeta;
                     message?: string;
                 };
                 if (!response.ok) {
                     throw new Error(payload.message ?? 'Falha na busca.');
                 }
                 setResults(payload.data ?? []);
+                if (payload.meta) {
+                    setPagination(payload.meta);
+                }
             } catch (reason) {
                 if (
                     reason instanceof DOMException &&
@@ -328,7 +369,7 @@ export default function GameBuildPlanner() {
             window.clearTimeout(timeout);
             controller.abort();
         };
-    }, [activeSlot, query]);
+    }, [activeSlot, order, page, pageSize, query, source]);
 
     const totals = useMemo(() => {
         const items = Object.values(loadout).filter(
@@ -384,6 +425,18 @@ export default function GameBuildPlanner() {
     function openSlot(slot: SlotKey) {
         setQuery('');
         setResults([]);
+        setPage(1);
+        setPageSize(24);
+        setSource('all');
+        setOrder('name-asc');
+        setPagination({
+            current_page: 1,
+            from: null,
+            last_page: 1,
+            per_page: 24,
+            to: null,
+            total: 0,
+        });
         setActiveSlot(slot);
     }
 
@@ -588,7 +641,7 @@ export default function GameBuildPlanner() {
                     open={activeSlot !== null}
                     onOpenChange={(open) => !open && setActiveSlot(null)}
                 >
-                    <DialogContent className="max-h-[88vh] overflow-hidden sm:max-w-5xl">
+                    <DialogContent className="flex max-h-[88vh] flex-col overflow-hidden sm:max-w-5xl">
                         <DialogHeader>
                             <DialogTitle>
                                 {activeSlot
@@ -600,21 +653,80 @@ export default function GameBuildPlanner() {
                                 inventário.
                             </DialogDescription>
                         </DialogHeader>
-                        <label className="relative block">
-                            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                                autoFocus
-                                value={query}
-                                onChange={(event) =>
-                                    setQuery(event.target.value)
-                                }
-                                placeholder="Buscar pelo nome do item..."
-                                className="h-11 w-full rounded-md border border-input bg-background pr-10 pl-10 text-sm outline-none focus:ring-2 focus:ring-ring"
-                            />
-                            {searching && (
-                                <LoaderCircle className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-primary" />
-                            )}
-                        </label>
+                        <div className="grid shrink-0 gap-2 md:grid-cols-[minmax(0,1fr)_160px_170px_130px]">
+                            <label className="relative block">
+                                <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <input
+                                    autoFocus
+                                    value={query}
+                                    onChange={(event) => {
+                                        setQuery(event.target.value);
+                                        setPage(1);
+                                    }}
+                                    placeholder="Buscar pelo nome do item..."
+                                    className="h-11 w-full rounded-md border border-input bg-background pr-10 pl-10 text-sm outline-none focus:ring-2 focus:ring-ring"
+                                />
+                                {searching && (
+                                    <LoaderCircle className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-primary" />
+                                )}
+                            </label>
+
+                            <label className="relative">
+                                <Filter className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <select
+                                    aria-label="Filtrar por origem"
+                                    value={source}
+                                    onChange={(event) => {
+                                        setSource(
+                                            event.target.value as ItemSource,
+                                        );
+                                        setPage(1);
+                                    }}
+                                    className="h-11 w-full appearance-none rounded-md border border-input bg-background pr-8 pl-9 text-sm outline-none focus:ring-2 focus:ring-ring"
+                                >
+                                    <option value="all">
+                                        Todas as origens
+                                    </option>
+                                    <option value="vanilla">Vanilla</option>
+                                    <option value="calamity">
+                                        Calamity Mod
+                                    </option>
+                                </select>
+                            </label>
+
+                            <select
+                                aria-label="Ordenar itens"
+                                value={order}
+                                onChange={(event) => {
+                                    setOrder(event.target.value as ItemOrder);
+                                    setPage(1);
+                                }}
+                                className="h-11 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                            >
+                                <option value="name-asc">Nome: A–Z</option>
+                                <option value="name-desc">Nome: Z–A</option>
+                                <option value="rarity-asc">
+                                    Raridade: crescente
+                                </option>
+                                <option value="rarity-desc">
+                                    Raridade: decrescente
+                                </option>
+                            </select>
+
+                            <select
+                                aria-label="Itens por página"
+                                value={pageSize}
+                                onChange={(event) => {
+                                    setPageSize(Number(event.target.value));
+                                    setPage(1);
+                                }}
+                                className="h-11 rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                            >
+                                <option value={12}>12 por página</option>
+                                <option value={24}>24 por página</option>
+                                <option value={48}>48 por página</option>
+                            </select>
+                        </div>
 
                         {error && (
                             <p className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
@@ -622,7 +734,7 @@ export default function GameBuildPlanner() {
                             </p>
                         )}
 
-                        <div className="grid max-h-[60vh] grid-cols-2 gap-2 overflow-y-auto pr-2 sm:grid-cols-3 lg:grid-cols-4">
+                        <div className="grid min-h-0 flex-1 grid-cols-2 content-start gap-2 overflow-y-auto pr-2 sm:grid-cols-3 lg:grid-cols-4">
                             {results.map((item) => (
                                 <button
                                     key={item.global_id}
@@ -673,6 +785,58 @@ export default function GameBuildPlanner() {
                                 </div>
                             )}
                         </div>
+
+                        <footer className="flex shrink-0 flex-col gap-3 border-t border-border pt-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                            <p className="text-xs text-muted-foreground">
+                                {pagination.total > 0 ? (
+                                    <>
+                                        Exibindo {pagination.from}–
+                                        {pagination.to} de{' '}
+                                        {pagination.total.toLocaleString(
+                                            'pt-BR',
+                                        )}{' '}
+                                        itens
+                                    </>
+                                ) : (
+                                    'Nenhum item encontrado'
+                                )}
+                            </p>
+                            <div className="flex items-center justify-between gap-2 sm:justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPage((current) => current - 1)
+                                    }
+                                    disabled={
+                                        searching ||
+                                        pagination.current_page <= 1
+                                    }
+                                    className="inline-flex h-9 items-center gap-1 rounded-md border border-border bg-background px-3 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    <ChevronLeft className="size-4" />
+                                    Anterior
+                                </button>
+                                <span className="min-w-24 text-center text-xs font-medium">
+                                    Página {pagination.current_page} de{' '}
+                                    {pagination.last_page}
+                                </span>
+                                <button
+                                    type="button"
+                                    onClick={() =>
+                                        setPage((current) => current + 1)
+                                    }
+                                    disabled={
+                                        searching ||
+                                        pagination.current_page >=
+                                            pagination.last_page
+                                    }
+                                    className="inline-flex h-9 items-center gap-1 rounded-md border border-border bg-background px-3 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    Próxima
+                                    <ChevronRight className="size-4" />
+                                </button>
+                            </div>
+                        </footer>
                     </DialogContent>
                 </Dialog>
             </main>
