@@ -1356,6 +1356,7 @@ class GamePlannerBuilder
         ]);
 
         $recommendationCount = 0;
+        $recommendationRows = [];
         foreach ($milestones as $milestone) {
             $byRole = [];
             foreach ($candidates as $candidate) {
@@ -1394,7 +1395,7 @@ class GamePlannerBuilder
 
             foreach ($byRole as $role => $roleCandidates) {
                 foreach ($roleCandidates as $priority => $candidate) {
-                    DB::table('game_planner_step_items')->insert([
+                    $recommendationRows[] = [
                         'step_id' => $stepId,
                         'item_global_id' => $candidate['global_id'],
                         'slot_type' => $role,
@@ -1419,10 +1420,17 @@ class GamePlannerBuilder
                         ], JSON_THROW_ON_ERROR),
                         'created_at' => $now,
                         'updated_at' => $now,
-                    ]);
+                    ];
                     $recommendationCount++;
+                    if (count($recommendationRows) >= 500) {
+                        DB::table('game_planner_step_items')->insert($recommendationRows);
+                        $recommendationRows = [];
+                    }
                 }
             }
+        }
+        if ($recommendationRows !== []) {
+            DB::table('game_planner_step_items')->insert($recommendationRows);
         }
 
         return $recommendationCount;
