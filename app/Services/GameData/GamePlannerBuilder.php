@@ -618,7 +618,8 @@ class GamePlannerBuilder
                 if ($methods === []) {
                     continue;
                 }
-                usort($methods, static fn (array $left, array $right): int => $left['rank'] <=> $right['rank']
+                usort($methods, static fn (array $left, array $right): int => max($floor, (int) $left['rank'])
+                    <=> max($floor, (int) $right['rank'])
                     ?: (int) ($left['priority'] ?? 100) <=> (int) ($right['priority'] ?? 100)
                 );
                 $best = $methods[0];
