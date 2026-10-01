@@ -90,7 +90,7 @@ class GameCatalogService
             ->join('mods as m', 'm.id', '=', 'i.mod_id')
             ->select([
                 'i.id', 'i.global_id', 'i.numeric_id', 'i.internal_name', 'i.display_name',
-                'i.slug', 'i.game_version', 'i.mod_version', 'i.rarity_text',
+                'i.slug', 'i.game_version', 'i.mod_version', 'i.rarity_text', 'i.tooltip', 'i.description',
                 'g.game_key', 'g.name as game_name', 'm.mod_key', 'm.name as mod_name',
             ]);
 
@@ -103,10 +103,20 @@ class GameCatalogService
         $globalIds = array_values(collect($paginator->items())->map(
             static fn (object $item): string => (string) ((array) $item)['global_id']
         )->all());
+        $itemIds = array_values(collect($paginator->items())->map(
+            static fn (object $item): int => (int) ((array) $item)['id']
+        )->all());
         $assets = $this->assets->forItems($globalIds);
-        $paginator->setCollection(collect($paginator->items())->map(static function (object $item) use ($assets): object {
+        $stats = $itemIds === [] ? collect() : $this->database()->table('item_stats')->whereIn('item_id', $itemIds)
+            ->get(['item_id', 'stat_key', 'numeric_value', 'text_value', 'raw_value'])->groupBy('item_id');
+        $paginator->setCollection(collect($paginator->items())->map(static function (object $item) use ($assets, $stats): object {
             $row = (array) $item;
             $row['icon'] = $assets[(string) $row['global_id']] ?? null;
+            $row['stats'] = collect($stats->get((int) $row['id'], collect()))->mapWithKeys(
+                static function (stdClass $stat): array {
+                    return [(string) $stat->stat_key => $stat->numeric_value ?? $stat->text_value ?? $stat->raw_value];
+                }
+            )->all();
 
             return (object) $row;
         }));
@@ -331,6 +341,43 @@ class GameCatalogService
                 $exists->selectRaw('1')->from('item_progression as filter_ip')->join('progression_stages as filter_ps', 'filter_ps.id', '=', 'filter_ip.progression_stage_id')
                     ->whereColumn('filter_ip.item_id', 'i.id')->where('filter_ps.global_id', $progression);
             });
+        }
+        if ($slot = $this->stringFilter($filters, 'slot')) {
+            if ($slot === 'weapon') {
+                $query->whereExists(function (Builder $exists): void {
+                    $exists->selectRaw('1')->from('item_stats as slot_stat')
+                        ->whereColumn('slot_stat.item_id', 'i.id')->where('slot_stat.stat_key', 'damage')
+                        ->where('slot_stat.numeric_value', '>', 0);
+                });
+            } elseif ($slot === 'accessory') {
+                $query->whereExists(function (Builder $exists): void {
+                    $exists->selectRaw('1')->from('item_categories as slot_ic')
+                        ->join('categories as slot_category', 'slot_category.id', '=', 'slot_ic.category_id')
+                        ->whereColumn('slot_ic.item_id', 'i.id')
+                        ->whereIn('slot_category.category_key', ['accessory', 'accessory_items']);
+                });
+            } else {
+                $bodySlot = match ($slot) {
+                    'armor_head' => ['head', 'helmet'],
+                    'armor_body' => ['body', 'shirt'],
+                    'armor_legs' => ['legs', 'pants'],
+                    default => [],
+                };
+                $query->whereExists(function (Builder $exists): void {
+                    $exists->selectRaw('1')->from('item_categories as slot_ic')
+                        ->join('categories as slot_category', 'slot_category.id', '=', 'slot_ic.category_id')
+                        ->whereColumn('slot_ic.item_id', 'i.id')->where('slot_category.category_key', 'armor');
+                })->whereExists(function (Builder $exists) use ($bodySlot): void {
+                    $exists->selectRaw('1')->from('item_properties as slot_property')
+                        ->whereColumn('slot_property.item_id', 'i.id')->where('slot_property.property_key', 'bodyslot')
+                        ->where(function (Builder $values) use ($bodySlot): void {
+                            foreach ($bodySlot as $value) {
+                                $values->orWhereLike('slot_property.text_value', "%{$value}%")
+                                    ->orWhereLike('slot_property.raw_value', "%{$value}%");
+                            }
+                        });
+                });
+            }
         }
     }
 

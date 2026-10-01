@@ -6,6 +6,8 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\Dashboard\GameDataController;
 use App\Http\Controllers\Dashboard\GameLibraryDashboardController;
 use App\Http\Controllers\Dashboard\GamePlannerDashboardController;
+use App\Http\Controllers\Dashboard\GameTimelineDashboardController;
+use App\Http\Controllers\Dashboard\TerrariaDashboardController;
 use App\Http\Controllers\PortfolioController;
 use App\Http\Controllers\SalemActionController;
 use App\Http\Controllers\SalemController;
@@ -22,9 +24,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('admin', AdminController::class)->middleware('can:managePortfolio')->name('admin.dashboard');
     Route::get('dashboard/biblioteca', GameLibraryDashboardController::class)
         ->middleware('can:managePortfolio')->name('dashboard.library');
-    Route::get('dashboard/biblioteca/terraria', GamePlannerDashboardController::class)
+    Route::get('dashboard/biblioteca/terraria', TerrariaDashboardController::class)
         ->middleware('can:managePortfolio')->name('dashboard.library.terraria');
-    Route::redirect('dashboard/game-planner', '/dashboard/biblioteca/terraria')
+    Route::get('dashboard/biblioteca/terraria/planner', GamePlannerDashboardController::class)
+        ->middleware('can:managePortfolio')->name('dashboard.library.terraria.planner');
+    Route::get('dashboard/biblioteca/terraria/timeline', GameTimelineDashboardController::class)
+        ->middleware('can:managePortfolio')->name('dashboard.library.terraria.timeline');
+    Route::redirect('dashboard/game-planner', '/dashboard/biblioteca/terraria/timeline')
         ->middleware('can:managePortfolio')->name('dashboard.game-planner');
 
     Route::prefix('dashboard/game-data')

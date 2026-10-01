@@ -29,6 +29,7 @@ class GameDataController extends Controller
             'mod' => ['nullable', 'string', 'max:128'], 'category' => ['nullable', 'string', 'max:128'],
             'combat_class' => ['nullable', 'string', 'max:128'], 'rarity' => ['nullable', 'string', 'max:255'],
             'progression' => ['nullable', 'string', 'max:255'], 'sort' => ['nullable', 'in:name,global_id,rarity'],
+            'slot' => ['nullable', 'in:weapon,armor_head,armor_body,armor_legs,accessory'],
             'direction' => ['nullable', 'in:asc,desc'], 'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
 
