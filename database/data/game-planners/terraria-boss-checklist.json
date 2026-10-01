@@ -1,0 +1,395 @@
+{
+    "source": {
+        "system": "boss_checklist",
+        "game_version": "1.4.4",
+        "calamity_branch": "1.4.4",
+        "source_file": "ModSupport/WeakReferenceSupport.cs"
+    },
+    "entries": [
+        {
+            "key": "starting-availability",
+            "name": "Início da jornada",
+            "type": "start",
+            "value": 0,
+            "aliases": []
+        },
+        {
+            "key": "king-slime",
+            "name": "King Slime",
+            "type": "boss",
+            "value": 1,
+            "aliases": ["King Slime"]
+        },
+        {
+            "key": "desert-scourge",
+            "name": "Desert Scourge",
+            "type": "boss",
+            "value": 1.6,
+            "aliases": ["Desert Scourge"]
+        },
+        {
+            "key": "giant-clam",
+            "name": "Giant Clam",
+            "type": "miniboss",
+            "value": 1.61,
+            "aliases": ["Giant Clam"]
+        },
+        {
+            "key": "eye-of-cthulhu",
+            "name": "Eye of Cthulhu",
+            "type": "boss",
+            "value": 2,
+            "aliases": ["Eye of Cthulhu"]
+        },
+        {
+            "key": "acid-rain-tier-1",
+            "name": "Acid Rain — Tier 1",
+            "type": "event",
+            "value": 2.67,
+            "aliases": ["Acid Rain T1"]
+        },
+        {
+            "key": "crabulon",
+            "name": "Crabulon",
+            "type": "boss",
+            "value": 2.7,
+            "aliases": ["Crabulon"]
+        },
+        {
+            "key": "eater-of-worlds",
+            "name": "Eater of Worlds",
+            "type": "boss",
+            "value": 3,
+            "aliases": ["Eater of Worlds"]
+        },
+        {
+            "key": "brain-of-cthulhu",
+            "name": "Brain of Cthulhu",
+            "type": "boss",
+            "value": 3,
+            "aliases": ["Brain of Cthulhu"]
+        },
+        {
+            "key": "hive-mind",
+            "name": "The Hive Mind",
+            "type": "boss",
+            "value": 3.98,
+            "aliases": ["Hive Mind", "The Hive Mind"]
+        },
+        {
+            "key": "perforators",
+            "name": "The Perforators",
+            "type": "boss",
+            "value": 3.99,
+            "aliases": ["Perforator Hive", "The Perforators", "Perforators"]
+        },
+        {
+            "key": "queen-bee",
+            "name": "Queen Bee",
+            "type": "boss",
+            "value": 4,
+            "aliases": ["Queen Bee"]
+        },
+        {
+            "key": "skeletron",
+            "name": "Skeletron",
+            "type": "boss",
+            "value": 5,
+            "aliases": ["Skeletron"]
+        },
+        {
+            "key": "deerclops",
+            "name": "Deerclops",
+            "type": "boss",
+            "value": 6,
+            "aliases": ["Deerclops"]
+        },
+        {
+            "key": "slime-god",
+            "name": "The Slime God",
+            "type": "boss",
+            "value": 6.7,
+            "aliases": ["Slime God", "The Slime God"]
+        },
+        {
+            "key": "wall-of-flesh",
+            "name": "Wall of Flesh",
+            "type": "boss",
+            "value": 7,
+            "aliases": ["Wall of Flesh"]
+        },
+        {
+            "key": "queen-slime",
+            "name": "Queen Slime",
+            "type": "boss",
+            "value": 8,
+            "aliases": ["Queen Slime"]
+        },
+        {
+            "key": "cryogen",
+            "name": "Cryogen",
+            "type": "boss",
+            "value": 8.5,
+            "aliases": ["Cryogen"]
+        },
+        {
+            "key": "the-twins",
+            "name": "The Twins",
+            "type": "boss",
+            "value": 9,
+            "aliases": ["The Twins", "Retinazer", "Spazmatism"]
+        },
+        {
+            "key": "aquatic-scourge",
+            "name": "Aquatic Scourge",
+            "type": "boss",
+            "value": 9.5,
+            "aliases": ["Aquatic Scourge"]
+        },
+        {
+            "key": "acid-rain-tier-2",
+            "name": "Acid Rain — Tier 2",
+            "type": "event",
+            "value": 9.51,
+            "aliases": ["Acid Rain T2"]
+        },
+        {
+            "key": "cragmaw-mire",
+            "name": "Cragmaw Mire",
+            "type": "miniboss",
+            "value": 9.52,
+            "aliases": ["Cragmaw Mire"]
+        },
+        {
+            "key": "destroyer",
+            "name": "The Destroyer",
+            "type": "boss",
+            "value": 10,
+            "aliases": ["The Destroyer", "Destroyer"]
+        },
+        {
+            "key": "brimstone-elemental",
+            "name": "Brimstone Elemental",
+            "type": "boss",
+            "value": 10.5,
+            "aliases": ["Brimstone Elemental"]
+        },
+        {
+            "key": "skeletron-prime",
+            "name": "Skeletron Prime",
+            "type": "boss",
+            "value": 11,
+            "aliases": ["Skeletron Prime"]
+        },
+        {
+            "key": "calamitas-clone",
+            "name": "Calamitas Clone",
+            "type": "boss",
+            "value": 11.7,
+            "aliases": ["Calamitas Clone"]
+        },
+        {
+            "key": "plantera",
+            "name": "Plantera",
+            "type": "boss",
+            "value": 12,
+            "aliases": ["Plantera"]
+        },
+        {
+            "key": "great-sand-shark",
+            "name": "Great Sand Shark",
+            "type": "miniboss",
+            "value": 12.09,
+            "aliases": ["Great Sand Shark"]
+        },
+        {
+            "key": "leviathan-anahita",
+            "name": "Leviathan and Anahita",
+            "type": "boss",
+            "value": 12.8,
+            "aliases": ["Leviathan", "Anahita"]
+        },
+        {
+            "key": "astrum-aureus",
+            "name": "Astrum Aureus",
+            "type": "boss",
+            "value": 12.81,
+            "aliases": ["Astrum Aureus"]
+        },
+        {
+            "key": "golem",
+            "name": "Golem",
+            "type": "boss",
+            "value": 13,
+            "aliases": ["Golem"]
+        },
+        {
+            "key": "duke-fishron",
+            "name": "Duke Fishron",
+            "type": "boss",
+            "value": 14,
+            "aliases": ["Duke Fishron"]
+        },
+        {
+            "key": "plaguebringer-goliath",
+            "name": "The Plaguebringer Goliath",
+            "type": "boss",
+            "value": 14.5,
+            "aliases": ["Plaguebringer Goliath", "The Plaguebringer Goliath"]
+        },
+        {
+            "key": "empress-of-light",
+            "name": "Empress of Light",
+            "type": "boss",
+            "value": 15,
+            "aliases": ["Empress of Light"]
+        },
+        {
+            "key": "betsy",
+            "name": "Old One's Army — Betsy",
+            "type": "event",
+            "value": 16,
+            "aliases": ["Betsy"]
+        },
+        {
+            "key": "ravager",
+            "name": "Ravager",
+            "type": "boss",
+            "value": 16.5,
+            "aliases": ["Ravager"]
+        },
+        {
+            "key": "lunatic-cultist",
+            "name": "Lunatic Cultist",
+            "type": "boss",
+            "value": 17,
+            "aliases": ["Lunatic Cultist"]
+        },
+        {
+            "key": "astrum-deus",
+            "name": "Astrum Deus",
+            "type": "boss",
+            "value": 17.5,
+            "aliases": ["Astrum Deus"]
+        },
+        {
+            "key": "moon-lord",
+            "name": "Moon Lord",
+            "type": "boss",
+            "value": 18,
+            "aliases": ["Moon Lord"]
+        },
+        {
+            "key": "profaned-guardians",
+            "name": "Profaned Guardians",
+            "type": "boss",
+            "value": 18.5,
+            "aliases": ["Profaned Guardians", "Profaned Guardian"]
+        },
+        {
+            "key": "dragonfolly",
+            "name": "The Dragonfolly",
+            "type": "boss",
+            "value": 18.6,
+            "aliases": ["Dragonfolly", "The Dragonfolly"]
+        },
+        {
+            "key": "providence",
+            "name": "Providence, the Profaned Goddess",
+            "type": "boss",
+            "value": 19,
+            "aliases": ["Providence", "Providence, the Profaned Goddess"]
+        },
+        {
+            "key": "ceaseless-void",
+            "name": "Ceaseless Void",
+            "type": "boss",
+            "value": 19.6,
+            "aliases": ["Ceaseless Void"]
+        },
+        {
+            "key": "storm-weaver",
+            "name": "Storm Weaver",
+            "type": "boss",
+            "value": 19.61,
+            "aliases": ["Storm Weaver"]
+        },
+        {
+            "key": "signus",
+            "name": "Signus, Envoy of the Devourer",
+            "type": "boss",
+            "value": 19.62,
+            "aliases": ["Signus", "Signus, Envoy of the Devourer"]
+        },
+        {
+            "key": "polterghast",
+            "name": "Polterghast",
+            "type": "boss",
+            "value": 20,
+            "aliases": ["Polterghast"]
+        },
+        {
+            "key": "acid-rain-tier-3",
+            "name": "Acid Rain — Tier 3",
+            "type": "event",
+            "value": 20.49,
+            "aliases": ["Acid Rain T3"]
+        },
+        {
+            "key": "mauler",
+            "name": "Mauler",
+            "type": "miniboss",
+            "value": 20.491,
+            "aliases": ["Mauler"]
+        },
+        {
+            "key": "nuclear-terror",
+            "name": "Nuclear Terror",
+            "type": "miniboss",
+            "value": 20.492,
+            "aliases": ["Nuclear Terror"]
+        },
+        {
+            "key": "old-duke",
+            "name": "The Old Duke",
+            "type": "boss",
+            "value": 20.5,
+            "aliases": ["Old Duke", "The Old Duke"]
+        },
+        {
+            "key": "devourer-of-gods",
+            "name": "The Devourer of Gods",
+            "type": "boss",
+            "value": 21,
+            "aliases": ["Devourer of Gods", "The Devourer of Gods"]
+        },
+        {
+            "key": "yharon",
+            "name": "Yharon, Dragon of Rebirth",
+            "type": "boss",
+            "value": 22,
+            "aliases": ["Yharon", "Yharon, Dragon of Rebirth"]
+        },
+        {
+            "key": "exo-mechs",
+            "name": "Exo Mechs",
+            "type": "boss",
+            "value": 22.99,
+            "aliases": ["Exo Mechs", "Ares", "Thanatos", "Artemis", "Apollo"]
+        },
+        {
+            "key": "supreme-calamitas",
+            "name": "Supreme Witch, Calamitas",
+            "type": "boss",
+            "value": 23,
+            "aliases": ["Supreme Calamitas", "Supreme Witch, Calamitas"]
+        },
+        {
+            "key": "boss-rush",
+            "name": "Boss Rush",
+            "type": "event",
+            "value": 25.99,
+            "aliases": ["Boss Rush"]
+        }
+    ]
+}

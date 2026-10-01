@@ -6,12 +6,19 @@ class GameLoadoutAssembler
 {
     private const ACCESSORY_SLOTS = 5;
 
+    private readonly GameReforgeService $reforges;
+
+    public function __construct(?GameReforgeService $reforges = null)
+    {
+        $this->reforges = $reforges ?? new GameReforgeService;
+    }
+
     /**
      * @param  list<array<string, mixed>>  $recommendations
      * @param  array<string, mixed>|null  $previous
      * @return array<string, mixed>
      */
-    public function assemble(array $recommendations, ?array $previous = null): array
+    public function assemble(array $recommendations, ?array $previous = null, int $balance = 0): array
     {
         usort($recommendations, static fn (array $left, array $right): int => (int) ($left['priority'] ?? PHP_INT_MAX) <=> (int) ($right['priority'] ?? PHP_INT_MAX));
 
@@ -28,6 +35,11 @@ class GameLoadoutAssembler
             ...$this->previousAccessories($previous),
         ]);
         $accessories = array_slice($accessories, 0, self::ACCESSORY_SLOTS);
+        $reforges = $this->reforges->recommendForAccessories(count($accessories), $balance);
+        foreach ($accessories as $index => &$accessory) {
+            $accessory['reforge'] = $reforges[$index] ?? null;
+        }
+        unset($accessory);
 
         $missing = [];
         if ($weapon === null) {

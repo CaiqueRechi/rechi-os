@@ -26,4 +26,8 @@ return [
         'GAME_DATA_PLANNER_DEFINITIONS_PATH',
         database_path('data/game-planners/terraria-calamity.json')
     ),
+    'boss_checklist_path' => env(
+        'GAME_DATA_BOSS_CHECKLIST_PATH',
+        database_path('data/game-planners/terraria-boss-checklist.json')
+    ),
 ];

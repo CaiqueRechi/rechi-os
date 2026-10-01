@@ -25,6 +25,9 @@ class GamePlannerService
         'game_planners',
         'game_planner_steps',
         'game_planner_step_items',
+        'game_item_unlock_rules',
+        'game_item_unlock_conditions',
+        'game_reforge_profiles',
     ];
 
     public function isReady(): bool
@@ -131,16 +134,18 @@ class GamePlannerService
     }
 
     /** @return array<string, mixed>|null */
-    public function planner(string $plannerKey): ?array
+    public function planner(string $plannerKey, int $balance = 0): ?array
     {
+        $balance = max(-100, min(100, $balance));
+
         return $this->cache->remember(
-            'planner:detail:'.sha1($plannerKey),
-            fn (): ?array => $this->loadPlanner($plannerKey)
+            'planner:detail:'.sha1($plannerKey.':'.$balance),
+            fn (): ?array => $this->loadPlanner($plannerKey, $balance)
         );
     }
 
     /** @return array<string, mixed>|null */
-    private function loadPlanner(string $plannerKey): ?array
+    private function loadPlanner(string $plannerKey, int $balance): ?array
     {
         $planner = DB::table('game_planners as p')
             ->join('game_progression_tracks as t', 't.id', '=', 'p.track_id')
@@ -157,13 +162,15 @@ class GamePlannerService
         }
 
         $plannerData = (array) $planner;
+        $plannerMetadata = $this->decodeJsonValue($plannerData['metadata_json'] ?? null);
+        $recommendationLimit = max(1, min(10, (int) ($plannerMetadata['recommendation_limit'] ?? 5)));
         $steps = DB::table('game_planner_steps as ps')
             ->join('game_progression_milestones as m', 'm.id', '=', 'ps.milestone_id')
             ->where('ps.planner_id', $plannerData['id'])->orderBy('ps.sort_order')->orderBy('m.sort_order')
             ->get([
                 'ps.id', 'ps.title', 'ps.notes', 'ps.sort_order', 'ps.metadata_json',
                 'm.milestone_key', 'm.name as milestone_name', 'm.description as milestone_description',
-                'm.requirements_json',
+                'm.milestone_type', 'm.source_system', 'm.progression_value', 'm.requirements_json',
             ]);
         $stepIds = $steps->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
         $items = $stepIds === [] ? collect() : DB::table('game_planner_step_items')
@@ -187,16 +194,66 @@ class GamePlannerService
 
                 return $row;
             })->values()->all();
-            $currentBuild = $this->loadouts->assemble(array_values($data['items']), $currentBuild);
+            $rankedItems = [];
+            foreach (collect($data['items'])->groupBy('slot_type') as $roleItems) {
+                $role = $roleItems->map(function (array $item) use ($balance): array {
+                    $vector = $item['conditions_json']['score_vector'] ?? null;
+                    $item['dynamic_score'] = is_array($vector)
+                        ? $this->scoreVector($vector, $balance)
+                        : (float) ($item['conditions_json']['score'] ?? 0);
+
+                    return $item;
+                })->sortByDesc('dynamic_score')->take($recommendationLimit)->values()->all();
+                foreach ($role as $priority => $item) {
+                    $item['priority'] = $priority + 1;
+                    $item['recommendation_tier'] = $priority === 0 ? 'core' : 'alternative';
+                    $rankedItems[] = $item;
+                }
+            }
+            $data['items'] = $rankedItems;
+            $currentBuild = $this->loadouts->assemble($rankedItems, $currentBuild, $balance);
             $data['build'] = $currentBuild;
             $timeline[] = $data;
         }
 
         $data = $this->decodeObject($planner, ['metadata_json']);
         unset($data['id']);
+        $data['balance'] = $balance;
         $data['timeline'] = $timeline;
 
         return $data;
+    }
+
+    /** @param array<string, mixed> $vector */
+    private function scoreVector(array $vector, int $balance): float
+    {
+        if ($balance <= 0) {
+            $position = ($balance + 100) / 100;
+            $offenseWeight = 0.35 + (0.75 - 0.35) * $position;
+            $defenseWeight = 1.0 + (0.75 - 1.0) * $position;
+            $utilityWeight = 0.45 + (0.5 - 0.45) * $position;
+        } else {
+            $position = $balance / 100;
+            $offenseWeight = 0.75 + (1.0 - 0.75) * $position;
+            $defenseWeight = 0.75 + (0.15 - 0.75) * $position;
+            $utilityWeight = 0.5 + (0.3 - 0.5) * $position;
+        }
+
+        return (float) ($vector['offense'] ?? 0) * $offenseWeight
+            + (float) ($vector['defense'] ?? 0) * $defenseWeight
+            + (float) ($vector['utility'] ?? 0) * $utilityWeight;
+    }
+
+    /** @return array<string, mixed> */
+    private function decodeJsonValue(mixed $value): array
+    {
+        if (! is_string($value) || $value === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**

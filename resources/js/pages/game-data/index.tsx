@@ -7,11 +7,12 @@ import {
     LoaderCircle,
     Search,
     Shield,
+    SlidersHorizontal,
     Sparkles,
     Sword,
     Swords,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
     Dialog,
@@ -53,6 +54,14 @@ type PlannerItem = {
     slot_type: string;
     priority: number;
     notes?: string | null;
+    dynamic_score?: number;
+    reforge?: {
+        key: string;
+        name: string;
+        defense_bonus: number;
+        damage_percent: number;
+        critical_chance_percent: number;
+    } | null;
     item: ItemSummary | null;
 };
 
@@ -75,6 +84,8 @@ type TimelineStep = {
     title: string;
     milestone_name: string;
     milestone_description?: string | null;
+    milestone_type?: string;
+    progression_value?: number | string | null;
     items: PlannerItem[];
     build: BuildLoadout;
 };
@@ -86,6 +97,7 @@ type Planner = {
     archetype_name: string;
     status: string;
     version: string;
+    balance: number;
     timeline: TimelineStep[];
 };
 
@@ -131,6 +143,7 @@ type ItemDetail = {
     related_from: Array<Record<string, unknown>>;
     sources: Array<Record<string, unknown>>;
     completeness?: Record<string, unknown>;
+    unlocked_when: Array<Record<string, unknown>>;
     planner?: {
         availability?: Array<Record<string, unknown>>;
         recommendations?: Array<Record<string, unknown>>;
@@ -269,6 +282,67 @@ function DetailRecords({
     );
 }
 
+function UnlockRequirements({
+    records,
+}: {
+    records: Array<Record<string, unknown>>;
+}) {
+    if (records.length === 0) {
+        return null;
+    }
+
+    return (
+        <section>
+            <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                Desbloqueado quando
+            </h3>
+            <div className="grid gap-3 xl:grid-cols-2">
+                {records.map((record, index) => {
+                    const conditions = Array.isArray(record.conditions)
+                        ? (record.conditions as Array<Record<string, unknown>>)
+                        : [];
+
+                    return (
+                        <article
+                            key={`${String(record.method_key ?? index)}`}
+                            className="rounded-lg border border-[#6f5832] bg-[#171424] p-4"
+                        >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <strong className="text-sm text-[#fff8dc]">
+                                    {String(record.label ?? 'Desbloquear item')}
+                                </strong>
+                                <span className="rounded border border-[#d7a84b]/30 bg-[#d7a84b]/10 px-2 py-1 text-[9px] font-black tracking-wider text-[#e8cf8b] uppercase">
+                                    {formatLabel(
+                                        String(record.method_type ?? 'unknown'),
+                                    )}
+                                </span>
+                            </div>
+                            {conditions.length > 0 && (
+                                <ul className="mt-3 grid gap-2">
+                                    {conditions.map(
+                                        (condition, conditionIndex) => (
+                                            <li
+                                                key={`${String(condition.condition_type ?? '')}-${conditionIndex}`}
+                                                className="flex gap-2 text-xs leading-relaxed text-[#c9c1d7]"
+                                            >
+                                                <span className="mt-1 size-1.5 shrink-0 rounded-full bg-[#d7a84b]" />
+                                                {String(
+                                                    condition.label ??
+                                                        'Cumprir a condição',
+                                                )}
+                                            </li>
+                                        ),
+                                    )}
+                                </ul>
+                            )}
+                        </article>
+                    );
+                })}
+            </div>
+        </section>
+    );
+}
+
 function ItemSprite({
     item,
     displaySize,
@@ -389,7 +463,16 @@ function BuildSlot({
                         </strong>
                         {item && (
                             <small className="block truncate text-[10px] text-[#aaa1bd]">
-                                {item.mod_name}
+                                {recommendation?.reforge ? (
+                                    <>
+                                        <span className="font-bold text-[#7fd6a4]">
+                                            {recommendation.reforge.name}
+                                        </span>{' '}
+                                        · {item.mod_name}
+                                    </>
+                                ) : (
+                                    item.mod_name
+                                )}
                             </small>
                         )}
                     </span>
@@ -403,6 +486,18 @@ function BuildSlot({
                     <strong className="block text-sm">
                         {item.display_name}
                     </strong>
+                    {recommendation?.reforge && (
+                        <p className="mt-1 text-xs font-bold text-[#7fd6a4]">
+                            Reforge: {recommendation.reforge.name}
+                            {recommendation.reforge.defense_bonus > 0 &&
+                                ` (+${recommendation.reforge.defense_bonus} defesa)`}
+                            {recommendation.reforge.damage_percent > 0 &&
+                                ` (+${recommendation.reforge.damage_percent}% dano)`}
+                            {recommendation.reforge.critical_chance_percent >
+                                0 &&
+                                ` (+${recommendation.reforge.critical_chance_percent}% crítico)`}
+                        </p>
+                    )}
                     {stats.length > 0 && (
                         <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-white/10 pt-2">
                             {stats.map(([key, value]) => (
@@ -649,6 +744,9 @@ function ItemDetailDialog({
                                 title="Drops"
                                 records={detail.drops}
                             />
+                            <UnlockRequirements
+                                records={detail.unlocked_when}
+                            />
                             <DetailRecords
                                 title="Formas de obtenção"
                                 records={detail.acquisition_methods}
@@ -698,36 +796,47 @@ export default function GameDataIndex() {
     const [selectedPlannerKey, setSelectedPlannerKey] = useState('');
     const [planner, setPlanner] = useState<Planner | null>(null);
     const [loadingPlanner, setLoadingPlanner] = useState(false);
+    const [balance, setBalance] = useState(0);
     const [query, setQuery] = useState('');
     const [searchResults, setSearchResults] = useState<ItemSummary[]>([]);
     const [selectedItem, setSelectedItem] = useState<ItemDetail | null>(null);
     const [searching, setSearching] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const plannerRequest = useRef(0);
 
-    const loadPlanner = useCallback(async (plannerKey: string) => {
-        if (!plannerKey) {
-            return;
-        }
+    const loadPlanner = useCallback(
+        async (plannerKey: string, balanceValue: number) => {
+            if (!plannerKey) {
+                return;
+            }
 
-        setLoadingPlanner(true);
-        setError(null);
+            const requestId = ++plannerRequest.current;
+            setLoadingPlanner(true);
+            setError(null);
 
-        try {
-            setPlanner(
-                await getJson<Planner>(
-                    `/dashboard/game-data/planners/${encodeURIComponent(plannerKey)}`,
-                ),
-            );
-        } catch (reason) {
-            setError(
-                reason instanceof Error
-                    ? reason.message
-                    : 'Falha ao carregar o planner.',
-            );
-        } finally {
-            setLoadingPlanner(false);
-        }
-    }, []);
+            try {
+                const nextPlanner = await getJson<Planner>(
+                    `/dashboard/game-data/planners/${encodeURIComponent(plannerKey)}?balance=${balanceValue}`,
+                );
+                if (requestId === plannerRequest.current) {
+                    setPlanner(nextPlanner);
+                }
+            } catch (reason) {
+                if (requestId === plannerRequest.current) {
+                    setError(
+                        reason instanceof Error
+                            ? reason.message
+                            : 'Falha ao carregar o planner.',
+                    );
+                }
+            } finally {
+                if (requestId === plannerRequest.current) {
+                    setLoadingPlanner(false);
+                }
+            }
+        },
+        [],
+    );
 
     useEffect(() => {
         let active = true;
@@ -748,10 +857,6 @@ export default function GameDataIndex() {
                 setPlanners(plannerData);
                 const first = plannerData[0]?.planner_key ?? '';
                 setSelectedPlannerKey(first);
-
-                if (first) {
-                    void loadPlanner(first);
-                }
             })
             .catch((reason: unknown) => {
                 if (active) {
@@ -768,6 +873,18 @@ export default function GameDataIndex() {
         };
     }, [loadPlanner]);
 
+    useEffect(() => {
+        if (!selectedPlannerKey) {
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            void loadPlanner(selectedPlannerKey, balance);
+        }, 120);
+
+        return () => window.clearTimeout(timeout);
+    }, [balance, loadPlanner, selectedPlannerKey]);
+
     const classGroups = useMemo(() => {
         const roots = archetypes.filter((entry) => entry.kind === 'class');
 
@@ -778,10 +895,11 @@ export default function GameDataIndex() {
             ),
         }));
     }, [archetypes]);
+    const balanceLabel =
+        balance <= -34 ? 'Defensivo' : balance >= 34 ? 'Dano' : 'Balanceado';
 
     function selectPlanner(plannerKey: string) {
         setSelectedPlannerKey(plannerKey);
-        void loadPlanner(plannerKey);
     }
 
     async function searchItems(event: FormEvent) {
@@ -875,6 +993,74 @@ export default function GameDataIndex() {
                         </form>
                     </div>
                 </header>
+
+                <section className="rounded-xl border border-border bg-card p-5">
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+                        <div className="flex min-w-0 items-start gap-3 lg:w-72">
+                            <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                                <SlidersHorizontal className="size-5" />
+                            </span>
+                            <div>
+                                <p className="text-xs font-bold tracking-wider text-muted-foreground uppercase">
+                                    Perfil da build
+                                </p>
+                                <strong className="text-lg">
+                                    {balanceLabel}
+                                </strong>
+                                <p className="text-xs text-muted-foreground">
+                                    Equipamentos e reforges são recalculados ao
+                                    arrastar.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                            <input
+                                aria-label="Equilíbrio entre defesa e dano"
+                                type="range"
+                                min={-100}
+                                max={100}
+                                step={1}
+                                value={balance}
+                                onChange={(event) =>
+                                    setBalance(Number(event.target.value))
+                                }
+                                className="h-2 w-full cursor-grab accent-primary active:cursor-grabbing"
+                            />
+                            <div className="mt-2 grid grid-cols-3 text-[10px] font-black tracking-wider uppercase">
+                                <button
+                                    type="button"
+                                    onClick={() => setBalance(-100)}
+                                    className="text-left text-[#84b7d5]"
+                                >
+                                    Defesa
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBalance(0)}
+                                    className="text-center text-[#e8cf8b]"
+                                >
+                                    Balanceado
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setBalance(100)}
+                                    className="text-right text-[#dc7979]"
+                                >
+                                    Dano
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="w-16 text-right font-mono text-sm font-bold text-primary">
+                            {balance > 0 ? '+' : ''}
+                            {balance}
+                            {loadingPlanner && (
+                                <LoaderCircle className="mt-1 ml-auto size-4 animate-spin" />
+                            )}
+                        </div>
+                    </div>
+                </section>
 
                 {error && (
                     <div className="flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
@@ -1001,7 +1187,7 @@ export default function GameDataIndex() {
 
                     <section className="relative min-w-0 overflow-hidden rounded-xl border border-[#4f4268] bg-[#0d0c16] p-4 md:p-6">
                         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(83_61_120/0.28),transparent_42%),linear-gradient(rgb(255_255_255/0.018)_1px,transparent_1px),linear-gradient(90deg,rgb(255_255_255/0.018)_1px,transparent_1px)] bg-[size:auto,16px_16px,16px_16px]" />
-                        {loadingPlanner ? (
+                        {loadingPlanner && !planner ? (
                             <div className="relative grid min-h-64 place-items-center">
                                 <LoaderCircle className="size-8 animate-spin text-primary" />
                             </div>
@@ -1065,11 +1251,26 @@ export default function GameDataIndex() {
                                                     className={`col-start-2 mt-3 self-start rounded-lg border border-[#4b405f] bg-[#171424]/80 p-4 lg:row-start-1 lg:mt-2 ${infoSide}`}
                                                 >
                                                     <p className="text-[9px] font-black tracking-[0.2em] text-[#d7a84b] uppercase">
-                                                        Marco de progressão
+                                                        {step.milestone_type ===
+                                                        'event'
+                                                            ? 'Evento'
+                                                            : step.milestone_type ===
+                                                                'miniboss'
+                                                              ? 'Miniboss'
+                                                              : 'Boss Checklist'}
                                                     </p>
                                                     <h3 className="mt-1 font-black text-[#fff8dc]">
                                                         {step.milestone_name}
                                                     </h3>
+                                                    {step.progression_value !=
+                                                        null && (
+                                                        <span className="mt-1 inline-block rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-[#aaa1bd]">
+                                                            ordem{' '}
+                                                            {String(
+                                                                step.progression_value,
+                                                            )}
+                                                        </span>
+                                                    )}
                                                     {step.milestone_description && (
                                                         <p className="mt-2 text-xs leading-relaxed text-[#aaa1bd]">
                                                             {

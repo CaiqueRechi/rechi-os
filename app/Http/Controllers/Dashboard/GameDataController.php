@@ -139,13 +139,16 @@ class GameDataController extends Controller
         return response()->json(['data' => $planners->planners($filters)]);
     }
 
-    public function planner(string $plannerKey, GamePlannerService $planners): JsonResponse
+    public function planner(string $plannerKey, Request $request, GamePlannerService $planners): JsonResponse
     {
         if (! $planners->isReady()) {
             return $this->plannerUnavailable();
         }
 
-        $planner = $planners->planner($plannerKey);
+        $filters = $request->validate([
+            'balance' => ['nullable', 'integer', 'min:-100', 'max:100'],
+        ]);
+        $planner = $planners->planner($plannerKey, (int) ($filters['balance'] ?? 0));
 
         return $planner ? response()->json(['data' => $planner]) : response()->json(['message' => 'Planner not found.'], 404);
     }
