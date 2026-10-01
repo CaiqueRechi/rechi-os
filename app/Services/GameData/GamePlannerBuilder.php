@@ -1356,6 +1356,27 @@ class GamePlannerBuilder
             'updated_at' => $now,
         ]);
 
+        $stepRows = [];
+        foreach ($milestones as $milestone) {
+            $stepRows[] = [
+                'planner_id' => $plannerId,
+                'milestone_id' => $milestoneIds[$milestone['key']],
+                'title' => $milestone['name'],
+                'notes' => 'Generated for every derived progression milestone using the best currently available loadout.',
+                'sort_order' => $milestone['rank'],
+                'metadata_json' => json_encode(['algorithm' => self::ALGORITHM_VERSION], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }
+        DB::table('game_planner_steps')->insert($stepRows);
+        $stepIds = DB::table('game_planner_steps')->where('planner_id', $plannerId)
+            ->get(['id', 'milestone_id'])->mapWithKeys(static function (object $row): array {
+                $data = (array) $row;
+
+                return [(int) $data['milestone_id'] => (int) $data['id']];
+            });
+
         $recommendationCount = 0;
         $recommendationRows = [];
         foreach ($milestones as $milestone) {
@@ -1383,16 +1404,7 @@ class GamePlannerBuilder
             }
             unset($roleCandidates);
 
-            $stepId = (int) DB::table('game_planner_steps')->insertGetId([
-                'planner_id' => $plannerId,
-                'milestone_id' => $milestoneIds[$milestone['key']],
-                'title' => $milestone['name'],
-                'notes' => 'Generated for every derived progression milestone using the best currently available loadout.',
-                'sort_order' => $milestone['rank'],
-                'metadata_json' => json_encode(['algorithm' => self::ALGORITHM_VERSION], JSON_THROW_ON_ERROR),
-                'created_at' => $now,
-                'updated_at' => $now,
-            ]);
+            $stepId = (int) $stepIds->get($milestoneIds[$milestone['key']]);
 
             foreach ($byRole as $role => $roleCandidates) {
                 foreach ($roleCandidates as $priority => $candidate) {
