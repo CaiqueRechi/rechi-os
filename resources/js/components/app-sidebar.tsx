@@ -44,8 +44,8 @@ export function AppSidebar() {
     ];
 
     return (
-        <Sidebar collapsible="icon" variant="inset">
-            <SidebarHeader>
+        <Sidebar collapsible="icon" variant="sidebar">
+            <SidebarHeader className="border-b border-sidebar-border p-3">
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
@@ -61,7 +61,7 @@ export function AppSidebar() {
                 <NavMain items={mainNavItems} />
             </SidebarContent>
 
-            <SidebarFooter>
+            <SidebarFooter className="border-t border-sidebar-border p-3">
                 <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
