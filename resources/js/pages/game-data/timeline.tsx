@@ -247,25 +247,25 @@ function DetailRecords({
                 {title}{' '}
                 <span className="text-[#81768f]">({records.length})</span>
             </h3>
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
                 {records.map((record, index) => (
                     <article
                         key={`${title}-${index}-${String(record.global_id ?? record.id ?? '')}`}
-                        className="rounded-lg border border-[#4b405f] bg-[#171424] p-3"
+                        className="min-w-0 overflow-hidden rounded-lg border border-[#4b405f] bg-[#171424] p-3"
                     >
-                        <strong className="block text-sm text-[#fff8dc]">
+                        <strong className="block text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
                             {recordTitle(record, index)}
                         </strong>
                         <dl className="mt-2 grid gap-1.5 text-xs">
                             {Object.entries(record).map(([key, value]) => (
                                 <div
                                     key={key}
-                                    className="grid grid-cols-[minmax(90px,0.35fr)_minmax(0,1fr)] gap-2 border-t border-white/5 pt-1.5"
+                                    className="grid min-w-0 grid-cols-1 gap-1 border-t border-white/5 pt-1.5 sm:grid-cols-[minmax(90px,0.35fr)_minmax(0,1fr)] sm:gap-2"
                                 >
                                     <dt className="truncate font-bold text-[#81768f] uppercase">
                                         {formatLabel(key)}
                                     </dt>
-                                    <dd className="break-words whitespace-pre-wrap text-[#c9c1d7]">
+                                    <dd className="min-w-0 [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-[#c9c1d7]">
                                         {formatDetailValue(value)}
                                     </dd>
                                 </div>
@@ -292,7 +292,7 @@ function UnlockRequirements({
             <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
                 Desbloqueado quando
             </h3>
-            <div className="grid gap-3 xl:grid-cols-2">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
                 {records.map((record, index) => {
                     const conditions = Array.isArray(record.conditions)
                         ? (record.conditions as Array<Record<string, unknown>>)
@@ -301,10 +301,10 @@ function UnlockRequirements({
                     return (
                         <article
                             key={`${String(record.method_key ?? index)}`}
-                            className="rounded-lg border border-[#6f5832] bg-[#171424] p-4"
+                            className="min-w-0 overflow-hidden rounded-lg border border-[#6f5832] bg-[#171424] p-4"
                         >
                             <div className="flex flex-wrap items-center justify-between gap-2">
-                                <strong className="text-sm text-[#fff8dc]">
+                                <strong className="text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
                                     {String(record.label ?? 'Desbloquear item')}
                                 </strong>
                                 <span className="rounded border border-[#d7a84b]/30 bg-[#d7a84b]/10 px-2 py-1 text-[9px] font-black tracking-wider text-[#e8cf8b] uppercase">
@@ -319,7 +319,7 @@ function UnlockRequirements({
                                         (condition, conditionIndex) => (
                                             <li
                                                 key={`${String(condition.condition_type ?? '')}-${conditionIndex}`}
-                                                className="flex gap-2 text-xs leading-relaxed text-[#c9c1d7]"
+                                                className="flex min-w-0 gap-2 text-xs leading-relaxed [overflow-wrap:anywhere] break-words text-[#c9c1d7]"
                                             >
                                                 <span className="mt-1 size-1.5 shrink-0 rounded-full bg-[#d7a84b]" />
                                                 {String(
@@ -627,10 +627,10 @@ function ItemDetailDialog({
             open={detail !== null}
             onOpenChange={(open) => !open && onClose()}
         >
-            <DialogContent className="flex h-[92vh] w-[96vw] max-w-[1400px] flex-col gap-0 overflow-hidden border-[#6f5832] bg-[#0d0c16] p-0 text-[#fff8dc]">
+            <DialogContent className="flex h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none min-w-0 flex-col gap-0 overflow-hidden border-[#6f5832] bg-[#0d0c16] p-0 text-[#fff8dc] sm:h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-[calc(100vw-2rem)] lg:max-w-[1200px]">
                 {detail && item && (
                     <>
-                        <DialogHeader className="border-b border-[#4b405f] bg-[linear-gradient(180deg,#302744,#171424)] p-5 pr-14 text-left">
+                        <DialogHeader className="min-w-0 border-b border-[#4b405f] bg-[linear-gradient(180deg,#302744,#171424)] p-4 pr-12 text-left sm:p-5 sm:pr-14">
                             <div className="flex items-start gap-4">
                                 <ItemIcon
                                     item={{ ...item, icon: detail.icon }}
@@ -639,7 +639,7 @@ function ItemDetailDialog({
                                     <p className="text-[10px] font-black tracking-[0.18em] text-[#d7a84b] uppercase">
                                         {item.mod_name ?? 'Terraria'}
                                     </p>
-                                    <DialogTitle className="mt-1 text-2xl font-black text-[#fff8dc]">
+                                    <DialogTitle className="mt-1 text-xl font-black [overflow-wrap:anywhere] break-words text-[#fff8dc] sm:text-2xl">
                                         {item.display_name}
                                     </DialogTitle>
                                     <DialogDescription className="mt-1 text-xs break-all text-[#aaa1bd]">
@@ -649,9 +649,9 @@ function ItemDetailDialog({
                             </div>
                         </DialogHeader>
 
-                        <div className="flex-1 space-y-7 overflow-y-auto p-5 md:p-7">
+                        <div className="min-w-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto p-3 sm:p-5 md:space-y-7 md:p-7">
                             {(item.tooltip || item.description) && (
-                                <p className="max-w-5xl rounded-lg border border-[#4b405f] bg-[#171424] p-4 text-sm leading-relaxed text-[#c9c1d7]">
+                                <p className="max-w-5xl rounded-lg border border-[#4b405f] bg-[#171424] p-4 text-sm leading-relaxed [overflow-wrap:anywhere] break-words text-[#c9c1d7]">
                                     {item.tooltip || item.description}
                                 </p>
                             )}
@@ -660,17 +660,17 @@ function ItemDetailDialog({
                                 <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
                                     Status
                                 </h3>
-                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                                <div className="grid min-w-0 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
                                     {Object.entries(detail.stats_map).map(
                                         ([key, stat]) => (
                                             <div
                                                 key={key}
-                                                className="rounded-lg border border-[#4b405f] bg-[#171424] p-3"
+                                                className="min-w-0 overflow-hidden rounded-lg border border-[#4b405f] bg-[#171424] p-3"
                                             >
                                                 <small className="block text-[10px] font-bold text-[#81768f] uppercase">
                                                     {formatLabel(key)}
                                                 </small>
-                                                <strong className="mt-1 block text-sm text-[#fff8dc]">
+                                                <strong className="mt-1 block text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
                                                     {formatStatValue(
                                                         stat.value,
                                                     )}{' '}
@@ -690,7 +690,7 @@ function ItemDetailDialog({
                                     {detail.combat_classes.map((entry) => (
                                         <span
                                             key={`class-${entry.name}`}
-                                            className="rounded-full border border-[#d7a84b]/35 bg-[#d7a84b]/10 px-3 py-1 text-[#e8cf8b]"
+                                            className="max-w-full rounded-full border border-[#d7a84b]/35 bg-[#d7a84b]/10 px-3 py-1 [overflow-wrap:anywhere] break-words text-[#e8cf8b]"
                                         >
                                             <Swords className="mr-1 inline size-3" />
                                             {entry.name}
@@ -699,7 +699,7 @@ function ItemDetailDialog({
                                     {detail.categories.map((entry) => (
                                         <span
                                             key={`category-${entry.name}`}
-                                            className="rounded-full border border-[#79649a]/50 bg-[#302744] px-3 py-1 text-[#c9c1d7]"
+                                            className="max-w-full rounded-full border border-[#79649a]/50 bg-[#302744] px-3 py-1 [overflow-wrap:anywhere] break-words text-[#c9c1d7]"
                                         >
                                             <Shield className="mr-1 inline size-3" />
                                             {entry.name}
@@ -708,7 +708,7 @@ function ItemDetailDialog({
                                     {detail.tags.map((entry) => (
                                         <span
                                             key={`tag-${entry.name}`}
-                                            className="rounded-full border border-[#4b405f] bg-[#171424] px-3 py-1 text-[#aaa1bd]"
+                                            className="max-w-full rounded-full border border-[#4b405f] bg-[#171424] px-3 py-1 [overflow-wrap:anywhere] break-words text-[#aaa1bd]"
                                         >
                                             {entry.name}
                                         </span>
