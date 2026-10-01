@@ -1386,14 +1386,15 @@ class GamePlannerBuilder
                     $byRole[$candidate['role']][] = $candidate;
                 }
             }
-            foreach ($byRole as &$roleCandidates) {
+            foreach ($byRole as $role => &$roleCandidates) {
                 $selected = [];
+                $anchorLimit = $role === 'accessory' ? $recommendationLimit : 1;
                 foreach ([-100, 0, 100] as $balance) {
                     $ranked = $roleCandidates;
                     usort($ranked, fn (array $left, array $right): int => $this->scoreVector($right['score_vector'], $balance)
                         <=> $this->scoreVector($left['score_vector'], $balance)
                     );
-                    foreach (array_slice($ranked, 0, $recommendationLimit) as $candidate) {
+                    foreach (array_slice($ranked, 0, $anchorLimit) as $candidate) {
                         $selected[$candidate['global_id']] = $candidate;
                     }
                 }
