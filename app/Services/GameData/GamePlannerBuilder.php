@@ -9,9 +9,15 @@ use RuntimeException;
 
 class GamePlannerBuilder
 {
-    private const ALGORITHM_VERSION = 'availability-power-v4';
+    private const ALGORITHM_VERSION = 'unlock-graph-boss-checklist-v5';
 
-    private const MAX_PROGRESS_RANK = 3000;
+    private const RANK_SCALE = 100;
+
+    private const HARDMODE_RANK = 700;
+
+    private const MOON_LORD_RANK = 1800;
+
+    public function __construct(private readonly GameReforgeService $reforges) {}
 
     /** @return array<string, int|string> */
     public function build(string $trackKey): array
@@ -25,17 +31,18 @@ class GamePlannerBuilder
 
         $trackData = (array) $track;
         $trackMetadata = $this->decodeJson($trackData['metadata_json'] ?? null);
-        $tierCount = max(6, min(30, (int) ($trackMetadata['tiers_per_phase'] ?? 6) * 3));
         $recommendationLimit = max(1, min(10, (int) ($trackMetadata['recommendations_per_slot'] ?? 5)));
         $minimumUpgrade = max(0.0, (float) ($trackMetadata['minimum_upgrade_percent'] ?? 8) / 100);
 
+        $progression = $this->loadBossChecklist();
         $items = $this->loadItemFacts();
-        $bosses = $this->loadBossRanks($items);
+        $bosses = $this->loadBossRanks($progression);
         $npcRanks = $this->loadNpcRanks($bosses);
         $dropMethods = $this->loadDropMethods($bosses, $npcRanks);
         $recipes = $this->loadRecipes($bosses);
         $availability = $this->deriveAvailability($items, $dropMethods, $recipes);
-        $milestones = $this->deriveMilestones($items, $availability, $tierCount);
+        $milestones = $this->deriveMilestones($progression);
+        $this->reforges->sync();
         $archetypes = DB::table('game_build_archetypes')->where('game_key', (string) $trackData['game_key'])
             ->where('is_active', true)
             ->orderBy('sort_order')->orderBy('name')->get();
@@ -55,6 +62,7 @@ class GamePlannerBuilder
             $this->clearGeneratedData($trackId, $archetypeIds);
             $milestoneIds = $this->storeMilestones($trackId, $milestones);
             $this->storeAvailability($trackId, $items, $availability, $milestones, $milestoneIds);
+            $this->storeUnlockRules($trackId, $items, $availability);
 
             $plannerCount = 0;
             $plannerItemCount = 0;
@@ -96,7 +104,10 @@ class GamePlannerBuilder
 
     private function assertReady(): void
     {
-        foreach (['game_progression_tracks', 'game_build_archetypes', 'game_planners'] as $table) {
+        foreach ([
+            'game_progression_tracks', 'game_build_archetypes', 'game_planners',
+            'game_item_unlock_rules', 'game_item_unlock_conditions', 'game_reforge_profiles',
+        ] as $table) {
             if (! Schema::hasTable($table)) {
                 throw new RuntimeException('Planner tables are not installed. Run migrations first.');
             }
@@ -183,25 +194,31 @@ class GamePlannerBuilder
             }
         }
         foreach ($db->table('item_progression as ip')->join('progression_stages as ps', 'ps.id', '=', 'ip.progression_stage_id')
-            ->get(['ip.item_id', 'ps.sort_order']) as $progression) {
+            ->get(['ip.item_id', 'ps.global_id', 'ps.sort_order']) as $progression) {
             $row = (array) $progression;
             $itemId = (int) $row['item_id'];
             if (isset($items[$itemId])) {
                 $items[$itemId]['has_declared_availability'] = true;
+                $stageRank = match ((string) $row['global_id']) {
+                    'terraria:pre_hardmode' => 0,
+                    'terraria:hardmode' => self::HARDMODE_RANK,
+                    'terraria:post_moon_lord' => self::MOON_LORD_RANK,
+                    default => max(0, ((int) $row['sort_order'] - 100) * 10),
+                };
                 $items[$itemId]['floor_rank'] = max(
                     (int) $items[$itemId]['floor_rank'],
-                    max(0, ((int) $row['sort_order'] - 100) * 10)
+                    $stageRank
                 );
             }
         }
 
         foreach ($items as &$item) {
             if (in_array('hardmode', $item['tags'], true) || in_array('hardmodeonly', $item['tags'], true)) {
-                $item['floor_rank'] = max(1000, (int) $item['floor_rank']);
+                $item['floor_rank'] = max(self::HARDMODE_RANK, (int) $item['floor_rank']);
             }
             $raw = strtolower((string) ($item['raw_json'] ?? ''));
             if (str_contains($raw, 'post-moon lord') || str_contains($raw, 'post moon lord')) {
-                $item['floor_rank'] = max(2000, (int) $item['floor_rank']);
+                $item['floor_rank'] = max(self::MOON_LORD_RANK, (int) $item['floor_rank']);
             }
         }
         unset($item);
@@ -209,213 +226,97 @@ class GamePlannerBuilder
         return $items;
     }
 
-    /**
-     * @param  array<int, array<string, mixed>>  $items
-     * @return array<int, array{rank: int, name: string, score: float}>
-     */
-    private function loadBossRanks(array $items): array
+    /** @return list<array<string, mixed>> */
+    private function loadBossChecklist(): array
     {
-        $db = $this->catalogDatabase();
-        $bosses = [];
-        $rows = $db->table('bosses as b')->join('npcs as n', 'n.id', '=', 'b.npc_id')
-            ->leftJoin('npc_stats as life', function ($join): void {
-                $join->on('life.npc_id', '=', 'n.id')->where('life.stat_key', 'life');
-            })->leftJoin('npc_stats as damage', function ($join): void {
-                $join->on('damage.npc_id', '=', 'n.id')->where('damage.stat_key', 'damage');
-            })->leftJoin('npc_stats as defense', function ($join): void {
-                $join->on('defense.npc_id', '=', 'n.id')->where('defense.stat_key', 'defense');
-            })->get([
-                'n.id', 'n.display_name', 'life.numeric_value as life', 'damage.numeric_value as damage',
-                'defense.numeric_value as defense',
-            ]);
-
-        $combatScores = [];
-        foreach ($rows as $boss) {
-            $row = (array) $boss;
-            $life = max(1.0, (float) ($row['life'] ?? 1));
-            $score = log10($life + 1) * 100 + (float) ($row['damage'] ?? 0) + (float) ($row['defense'] ?? 0) * 2;
-            $combatScores[] = $score;
-            $bosses[(int) $row['id']] = ['rank' => 0, 'name' => (string) $row['display_name'], 'score' => $score];
+        $path = (string) config('game-data.boss_checklist_path');
+        if ($path === '' || ! is_file($path)) {
+            throw new RuntimeException('Boss Checklist progression data is not installed.');
         }
 
-        $bossFloorRanks = [];
-        $bossDropPower = [];
-        foreach ($db->table('drops')->whereNotNull('item_id')->get([
-            'npc_id', 'item_id', 'unresolved_source_name', 'condition_text', 'conditions_json',
-        ]) as $drop) {
-            $row = (array) $drop;
-            $itemId = (int) $row['item_id'];
-            if (! isset($items[$itemId])) {
-                continue;
-            }
-            $matchedBossIds = [];
-            $npcId = $row['npc_id'] === null ? null : (int) $row['npc_id'];
-            if ($npcId !== null && isset($bosses[$npcId])) {
-                $matchedBossIds[] = $npcId;
-            } else {
-                $sourceText = strtolower(
-                    (string) ($row['unresolved_source_name'] ?? '').' '.
-                    (string) ($row['condition_text'] ?? '').' '.
-                    (string) ($row['conditions_json'] ?? '')
-                );
-                foreach ($bosses as $candidateNpcId => $boss) {
-                    if ($this->conditionMentionsBoss($sourceText, $boss['name'])) {
-                        $matchedBossIds[] = $candidateNpcId;
+        $decoded = json_decode((string) file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
+        $entries = $decoded['entries'] ?? null;
+        if (! is_array($entries) || $entries === []) {
+            throw new RuntimeException('Boss Checklist progression data contains no entries.');
+        }
+
+        usort($entries, static fn (array $left, array $right): int => (float) $left['value'] <=> (float) $right['value']);
+
+        return array_values($entries);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $progression
+     * @return array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}>
+     */
+    private function loadBossRanks(array $progression): array
+    {
+        $bosses = [];
+        $rows = $this->catalogDatabase()->table('bosses as b')->join('npcs as n', 'n.id', '=', 'b.npc_id')
+            ->get(['n.id', 'n.display_name']);
+
+        foreach ($rows as $rowObject) {
+            $row = (array) $rowObject;
+            $displayName = (string) $row['display_name'];
+            $normalized = $this->normalizeName($displayName);
+            foreach ($progression as $entry) {
+                if (($entry['type'] ?? null) !== 'boss' && ($entry['type'] ?? null) !== 'miniboss') {
+                    continue;
+                }
+                $aliases = array_values(array_filter([
+                    (string) ($entry['name'] ?? ''),
+                    ...array_map('strval', is_array($entry['aliases'] ?? null) ? $entry['aliases'] : []),
+                ]));
+                $matches = false;
+                foreach ($aliases as $alias) {
+                    $candidate = $this->normalizeName($alias);
+                    if ($candidate !== '' && ($normalized === $candidate || str_contains($normalized, $candidate))) {
+                        $matches = true;
+                        break;
                     }
                 }
-            }
-            foreach ($matchedBossIds as $matchedBossId) {
-                $bossFloorRanks[$matchedBossId] = max(
-                    $bossFloorRanks[$matchedBossId] ?? 0,
-                    (int) $items[$itemId]['floor_rank']
-                );
-                if ((float) ($items[$itemId]['stats']['damage'] ?? 0) > 0) {
-                    $bossDropPower[$matchedBossId] = max(
-                        $bossDropPower[$matchedBossId] ?? 0.0,
-                        $this->powerScore($items[$itemId], 'weapon', '')
-                    );
+                if (! $matches) {
+                    continue;
                 }
+                $value = (float) $entry['value'];
+                $bosses[(int) $row['id']] = [
+                    'rank' => (int) round($value * self::RANK_SCALE),
+                    'name' => (string) $entry['name'],
+                    'score' => $value,
+                    'entry_key' => (string) $entry['key'],
+                    'type' => (string) $entry['type'],
+                ];
+                break;
             }
         }
 
-        sort($combatScores, SORT_NUMERIC);
-        $dropPowerScores = array_values($bossDropPower);
-        sort($dropPowerScores, SORT_NUMERIC);
-        $combatCount = count($combatScores);
-        $dropPowerCount = count($dropPowerScores);
-        $wallOfFleshScore = null;
-        $moonLordScore = null;
-        foreach ($bosses as $boss) {
-            $normalizedName = strtolower($boss['name']);
-            if (str_contains($normalizedName, 'wall of flesh')) {
-                $wallOfFleshScore = $boss['score'];
+        $virtualId = -1;
+        foreach ($progression as $entry) {
+            if (($entry['type'] ?? null) !== 'event') {
+                continue;
             }
-            if ($normalizedName === 'moon lord') {
-                $moonLordScore = $boss['score'];
-            }
+            $value = (float) $entry['value'];
+            $bosses[$virtualId--] = [
+                'rank' => (int) round($value * self::RANK_SCALE),
+                'name' => (string) $entry['name'],
+                'score' => $value,
+                'entry_key' => (string) $entry['key'],
+                'type' => 'event',
+            ];
         }
-        foreach ($bosses as $npcId => &$boss) {
-            $anchoredRank = $this->phaseAnchoredBossRank(
-                $boss['score'],
-                $combatScores,
-                $wallOfFleshScore,
-                $moonLordScore
-            );
-            $combatPosition = $this->lowerBound($combatScores, $boss['score']);
-            $combatPercentile = $combatCount <= 1 ? 0.0 : $combatPosition / ($combatCount - 1);
-            $dropPercentile = 0.0;
-            if (isset($bossDropPower[$npcId])) {
-                $dropPosition = $this->lowerBound($dropPowerScores, $bossDropPower[$npcId]);
-                $dropPercentile = $dropPowerCount <= 1 ? 0.0 : $dropPosition / ($dropPowerCount - 1);
-            }
-            $percentile = max($combatPercentile, $dropPercentile);
-            $fallbackRank = 100 + (int) round($percentile * (self::MAX_PROGRESS_RANK - 100));
-            $boss['rank'] = max($bossFloorRanks[$npcId] ?? 0, $anchoredRank ?? $fallbackRank);
-        }
-        unset($boss);
 
         return $bosses;
     }
 
-    /** @param list<float> $combatScores */
-    private function phaseAnchoredBossRank(
-        float $score,
-        array $combatScores,
-        ?float $wallOfFleshScore,
-        ?float $moonLordScore
-    ): ?int {
-        if ($wallOfFleshScore === null || $moonLordScore === null || $wallOfFleshScore >= $moonLordScore) {
-            return null;
-        }
-
-        if ($score <= $wallOfFleshScore) {
-            $phaseScores = array_values(array_filter(
-                $combatScores,
-                static fn (float $candidate): bool => $candidate <= $wallOfFleshScore
-            ));
-
-            return $this->rankWithinPhase($score, $phaseScores, 100, 1000, true);
-        }
-        if ($score <= $moonLordScore) {
-            $phaseScores = array_values(array_filter(
-                $combatScores,
-                static fn (float $candidate): bool => $candidate > $wallOfFleshScore && $candidate <= $moonLordScore
-            ));
-
-            return $this->rankWithinPhase($score, $phaseScores, 1000, 2000, false);
-        }
-        $phaseScores = array_values(array_filter(
-            $combatScores,
-            static fn (float $candidate): bool => $candidate > $moonLordScore
-        ));
-
-        return $this->rankWithinPhase($score, $phaseScores, 2000, self::MAX_PROGRESS_RANK, false);
-    }
-
-    /** @param list<float> $phaseScores */
-    private function rankWithinPhase(
-        float $score,
-        array $phaseScores,
-        int $minimum,
-        int $maximum,
-        bool $includeMinimum
-    ): int {
-        sort($phaseScores, SORT_NUMERIC);
-        $count = count($phaseScores);
-        if ($count === 0) {
-            return $maximum;
-        }
-        $position = min($this->lowerBound($phaseScores, $score), $count - 1);
-        $percentile = $includeMinimum && $count > 1
-            ? $position / ($count - 1)
-            : ($position + 1) / $count;
-
-        return $minimum + (int) round($percentile * ($maximum - $minimum));
-    }
-
-    /**
-     * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
-     * @return array<int, int>
-     */
+    /** @param array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}> $bosses */
     private function loadNpcRanks(array $bosses): array
     {
-        $bossScores = array_values(array_map(static fn (array $boss): float => $boss['score'], $bosses));
-        sort($bossScores, SORT_NUMERIC);
-        $bossCount = count($bossScores);
-        if ($bossCount === 0) {
-            return [];
-        }
-
         $ranks = [];
-        $rows = $this->catalogDatabase()->table('npcs as n')
-            ->leftJoin('npc_stats as life', function ($join): void {
-                $join->on('life.npc_id', '=', 'n.id')->where('life.stat_key', 'life');
-            })->leftJoin('npc_stats as damage', function ($join): void {
-                $join->on('damage.npc_id', '=', 'n.id')->where('damage.stat_key', 'damage');
-            })->leftJoin('npc_stats as defense', function ($join): void {
-                $join->on('defense.npc_id', '=', 'n.id')->where('defense.stat_key', 'defense');
-            })->get([
-                'n.id', 'life.numeric_value as life', 'damage.numeric_value as damage',
-                'defense.numeric_value as defense',
-            ]);
+        $rows = $this->catalogDatabase()->table('npcs')->get(['id']);
         foreach ($rows as $npc) {
             $row = (array) $npc;
             $npcId = (int) $row['id'];
-            if (isset($bosses[$npcId])) {
-                $ranks[$npcId] = $bosses[$npcId]['rank'];
-
-                continue;
-            }
-            $life = max(1.0, (float) ($row['life'] ?? 1));
-            $score = log10($life + 1) * 100 + (float) ($row['damage'] ?? 0) + (float) ($row['defense'] ?? 0) * 2;
-            $position = $this->lowerBound($bossScores, $score);
-            if ($position === 0 && $score < $bossScores[0]) {
-                $ranks[$npcId] = 0;
-
-                continue;
-            }
-            $percentile = $bossCount <= 1 ? 0.0 : min($position, $bossCount - 1) / ($bossCount - 1);
-            $ranks[$npcId] = 100 + (int) round($percentile * (self::MAX_PROGRESS_RANK - 100));
+            $ranks[$npcId] = $bosses[$npcId]['rank'] ?? 0;
         }
 
         return $ranks;
@@ -424,25 +325,43 @@ class GamePlannerBuilder
     /**
      * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
      * @param  array<int, int>  $npcRanks
-     * @return array<int, list<array{rank: int, type: string, confidence: string, source_item_id: int|null}>>
+     * @return array<int, list<array<string, mixed>>>
      */
     private function loadDropMethods(array $bosses, array $npcRanks): array
     {
         $methods = [];
+        $npcNames = $this->catalogDatabase()->table('npcs')->pluck('display_name', 'id');
         foreach ($this->catalogDatabase()->table('drops')->whereNotNull('item_id')
             ->get([
-                'item_id', 'npc_id', 'source_item_id', 'unresolved_source_name', 'source_type',
+                'id', 'item_id', 'npc_id', 'source_item_id', 'unresolved_source_name', 'source_type',
                 'condition_text', 'conditions_json',
             ]) as $drop) {
             $row = (array) $drop;
             $rank = 0;
             $confidence = 'derived';
+            $requirements = [];
             $npcId = $row['npc_id'] === null ? null : (int) $row['npc_id'];
             $sourceItemId = $row['source_item_id'] === null ? null : (int) $row['source_item_id'];
             if ($npcId !== null && isset($bosses[$npcId])) {
                 $rank = $bosses[$npcId]['rank'];
+                $requirements[] = [
+                    'type' => 'boss_defeated',
+                    'operator' => 'requires',
+                    'target_type' => $bosses[$npcId]['type'],
+                    'target_key' => $bosses[$npcId]['entry_key'],
+                    'numeric_value' => $bosses[$npcId]['score'],
+                    'label' => 'Derrotar '.$bosses[$npcId]['name'],
+                ];
             } elseif ($npcId !== null) {
                 $rank = $npcRanks[$npcId] ?? 0;
+                $npcName = (string) ($npcNames[$npcId] ?? 'NPC');
+                $requirements[] = [
+                    'type' => 'npc_drop',
+                    'operator' => 'requires',
+                    'target_type' => 'npc',
+                    'target_key' => (string) $npcId,
+                    'label' => 'Obter como drop de '.$npcName,
+                ];
             }
             $condition = strtolower(
                 (string) ($row['unresolved_source_name'] ?? '').' '.
@@ -450,15 +369,20 @@ class GamePlannerBuilder
                 (string) ($row['conditions_json'] ?? '')
             );
             $rank = max($rank, $this->conditionFloorRank($condition, $bosses));
+            $requirements = [...$requirements, ...$this->requirementsFromCondition($condition, $bosses)];
             if ($npcId === null && $sourceItemId === null
                 && trim((string) ($row['unresolved_source_name'] ?? '')) !== '' && $rank === 0) {
                 $confidence = 'unknown';
             }
             $methods[(int) $row['item_id']][] = [
+                'method_key' => 'drop-'.(int) $row['id'],
                 'rank' => $rank,
                 'type' => (string) $row['source_type'],
                 'confidence' => $confidence,
                 'source_item_id' => $sourceItemId,
+                'label' => $requirements[0]['label'] ?? 'Obter por drop',
+                'requirements' => $requirements,
+                'priority' => 20,
             ];
         }
 
@@ -467,7 +391,7 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
-     * @return array<int, list<array{ingredients: list<list<int>>, floor_rank: int}>>
+     * @return array<int, list<array<string, mixed>>>
      */
     private function loadRecipes(array $bosses): array
     {
@@ -477,6 +401,7 @@ class GamePlannerBuilder
             ->get(['id', 'result_item_id', 'raw_json']);
         $recipeResults = [];
         $recipeConstraints = [];
+        $recipeRequirements = [];
         foreach ($rows as $recipe) {
             $row = (array) $recipe;
             $recipeResults[(int) $row['id']] = (int) $row['result_item_id'];
@@ -511,6 +436,13 @@ class GamePlannerBuilder
             ->whereIn('rs.recipe_id', array_keys($recipeResults))->get(['rs.recipe_id', 'station.name']) as $station) {
             $row = (array) $station;
             $recipeConstraints[(int) $row['recipe_id']] .= ' '.(string) $row['name'];
+            $recipeRequirements[(int) $row['recipe_id']][] = [
+                'type' => 'crafting_station',
+                'operator' => 'requires',
+                'target_type' => 'crafting_station',
+                'target_key' => $this->normalizeName((string) $row['name']),
+                'label' => 'Usar '.$row['name'],
+            ];
         }
         foreach ($db->table('recipe_conditions')->whereIn('recipe_id', array_keys($recipeResults))
             ->get(['recipe_id', 'condition_type', 'condition_key', 'description', 'value_json']) as $condition) {
@@ -518,15 +450,29 @@ class GamePlannerBuilder
             $recipeConstraints[(int) $row['recipe_id']] .= ' '.implode(' ', array_filter([
                 $row['condition_type'], $row['condition_key'], $row['description'], $row['value_json'],
             ], static fn (mixed $value): bool => is_scalar($value)));
+            $description = trim((string) ($row['description'] ?? $row['condition_key'] ?? ''));
+            if ($description !== '') {
+                $recipeRequirements[(int) $row['recipe_id']][] = [
+                    'type' => 'game_condition',
+                    'operator' => 'requires',
+                    'target_type' => (string) ($row['condition_type'] ?? 'condition'),
+                    'target_key' => (string) ($row['condition_key'] ?? ''),
+                    'text_value' => $description,
+                    'label' => $description,
+                ];
+            }
         }
         foreach ($recipeResults as $recipeId => $resultItemId) {
             if (! isset($invalidRecipes[$recipeId]) && ($ingredients[$recipeId] ?? []) !== []) {
+                $conditionText = strtolower($recipeConstraints[$recipeId] ?? '');
                 $recipes[$resultItemId][] = [
+                    'method_key' => 'recipe-'.$recipeId,
                     'ingredients' => $ingredients[$recipeId],
-                    'floor_rank' => $this->conditionFloorRank(
-                        strtolower($recipeConstraints[$recipeId] ?? ''),
-                        $bosses
-                    ),
+                    'floor_rank' => $this->conditionFloorRank($conditionText, $bosses),
+                    'requirements' => [
+                        ...($recipeRequirements[$recipeId] ?? []),
+                        ...$this->requirementsFromCondition($conditionText, $bosses),
+                    ],
                 ];
             }
         }
@@ -536,9 +482,9 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array<string, mixed>>  $items
-     * @param  array<int, list<array{rank: int, type: string, confidence: string, source_item_id: int|null}>>  $dropMethods
-     * @param  array<int, list<array{ingredients: list<list<int>>, floor_rank: int}>>  $recipes
-     * @return array<int, array{rank: int, type: string, confidence: string}>
+     * @param  array<int, list<array<string, mixed>>>  $dropMethods
+     * @param  array<int, list<array<string, mixed>>>  $recipes
+     * @return array<int, array<string, mixed>>
      */
     private function deriveAvailability(array $items, array $dropMethods, array $recipes): array
     {
@@ -548,17 +494,60 @@ class GamePlannerBuilder
             $isDeclared = (bool) $item['has_declared_availability'] || $floor > 0;
             $hasConcreteMethod = ($dropMethods[$itemId] ?? []) !== [] || ($recipes[$itemId] ?? []) !== [];
             $isVendorItem = $this->isVendorItem($item);
-            $availability[$itemId] = [
-                'rank' => $floor,
-                'type' => $isVendorItem ? 'vendor' : ($isDeclared && ! $hasConcreteMethod ? 'game_state' : 'unknown'),
-                'confidence' => $isVendorItem ? 'derived' : ($isDeclared && ! $hasConcreteMethod ? 'declared' : 'unknown'),
-            ];
+            if ($isVendorItem) {
+                $availability[$itemId] = [
+                    'rank' => $floor,
+                    'type' => 'vendor',
+                    'confidence' => 'derived',
+                    'method_key' => 'vendor',
+                    'label' => 'Comprar de um vendedor disponível',
+                    'requirements' => [
+                        ...$this->floorRequirements($floor),
+                        [
+                            'type' => 'vendor_available',
+                            'operator' => 'requires',
+                            'target_type' => 'vendor',
+                            'target_key' => null,
+                            'label' => 'Encontrar o vendedor correspondente',
+                        ],
+                    ],
+                ];
+            } elseif ($isDeclared && ! $hasConcreteMethod) {
+                $availability[$itemId] = [
+                    'rank' => $floor,
+                    'type' => 'game_state',
+                    'confidence' => 'declared',
+                    'method_key' => 'declared-game-state',
+                    'label' => $this->floorLabel($floor),
+                    'requirements' => $this->floorRequirements($floor),
+                ];
+            } else {
+                $availability[$itemId] = [
+                    'rank' => $floor,
+                    'type' => 'unknown',
+                    'confidence' => 'unknown',
+                    'method_key' => 'unknown',
+                    'label' => 'Condição de desbloqueio ainda desconhecida',
+                    'requirements' => $this->floorRequirements($floor),
+                ];
+            }
         }
 
         for ($iteration = 0; $iteration < 30; $iteration++) {
             $changed = false;
             foreach ($items as $itemId => $item) {
                 $methods = [];
+                $specialMethod = $this->specialUnlockMethod($item);
+                if ($specialMethod !== null) {
+                    $methods[] = $specialMethod;
+                }
+                if (in_array($availability[$itemId]['type'], ['vendor', 'game_state'], true)) {
+                    $methods[] = [
+                        ...$availability[$itemId],
+                        'source_item_id' => null,
+                        'priority' => 10,
+                    ];
+                }
                 foreach ($dropMethods[$itemId] ?? [] as $dropMethod) {
                     if ($dropMethod['confidence'] === 'unknown') {
                         continue;
@@ -569,17 +558,30 @@ class GamePlannerBuilder
                             continue;
                         }
                         $dropMethod['rank'] = max($dropMethod['rank'], $availability[$sourceItemId]['rank']);
+                        $dropMethod['requirements'][] = [
+                            'type' => 'item_available',
+                            'operator' => 'requires',
+                            'target_type' => 'item',
+                            'target_key' => (string) $items[$sourceItemId]['global_id'],
+                            'label' => 'Obter '.(string) $items[$sourceItemId]['display_name'],
+                        ];
                     }
                     $methods[] = $dropMethod;
                 }
                 foreach ($recipes[$itemId] ?? [] as $recipe) {
                     $ingredientRanks = [];
+                    $ingredientRequirements = [];
                     $known = true;
                     foreach ($recipe['ingredients'] as $alternatives) {
                         $alternativeRanks = [];
+                        $alternativeItems = [];
                         foreach ($alternatives as $ingredientId) {
                             if (isset($availability[$ingredientId]) && $availability[$ingredientId]['confidence'] !== 'unknown') {
                                 $alternativeRanks[] = $availability[$ingredientId]['rank'];
+                                $alternativeItems[] = [
+                                    'global_id' => (string) $items[$ingredientId]['global_id'],
+                                    'name' => (string) $items[$ingredientId]['display_name'],
+                                ];
                             }
                         }
                         if ($alternativeRanks === []) {
@@ -587,13 +589,28 @@ class GamePlannerBuilder
                             break;
                         }
                         $ingredientRanks[] = min($alternativeRanks);
+                        $ingredientRequirements[] = [
+                            'type' => 'item_available',
+                            'operator' => count($alternativeItems) > 1 ? 'any_of' : 'requires',
+                            'target_type' => 'item',
+                            'target_key' => count($alternativeItems) === 1 ? $alternativeItems[0]['global_id'] : null,
+                            'value_json' => $alternativeItems,
+                            'label' => 'Obter '.implode(' ou ', array_column($alternativeItems, 'name')),
+                        ];
                     }
                     if ($known && $ingredientRanks !== []) {
                         $methods[] = [
+                            'method_key' => $recipe['method_key'],
                             'rank' => max($recipe['floor_rank'], max($ingredientRanks)),
                             'type' => 'crafting',
                             'confidence' => 'derived',
                             'source_item_id' => null,
+                            'label' => 'Fabricar o item',
+                            'requirements' => [
+                                ...$ingredientRequirements,
+                                ...$recipe['requirements'],
+                            ],
+                            'priority' => 30,
                         ];
                     }
                 }
@@ -601,13 +618,21 @@ class GamePlannerBuilder
                 if ($methods === []) {
                     continue;
                 }
-                usort($methods, static fn (array $left, array $right): int => $left['rank'] <=> $right['rank']);
+                usort($methods, static fn (array $left, array $right): int => $left['rank'] <=> $right['rank']
+                    ?: (int) ($left['priority'] ?? 100) <=> (int) ($right['priority'] ?? 100)
+                );
                 $best = $methods[0];
                 $rank = max((int) $item['floor_rank'], $best['rank']);
                 $derived = [
                     'rank' => $rank,
                     'type' => $best['type'],
                     'confidence' => $best['confidence'],
+                    'method_key' => $best['method_key'] ?? $best['type'],
+                    'label' => $best['label'] ?? 'Desbloquear o item',
+                    'requirements' => [
+                        ...$this->floorRequirements((int) $item['floor_rank']),
+                        ...($best['requirements'] ?? []),
+                    ],
                 ];
                 if ($derived !== $availability[$itemId]) {
                     $availability[$itemId] = $derived;
@@ -621,6 +646,62 @@ class GamePlannerBuilder
         }
 
         return $availability;
+    }
+
+    /** @param array<string, mixed> $item */
+    private function specialUnlockMethod(array $item): ?array
+    {
+        $oreTiers = [
+            'terraria:cobalt_ore' => [1, 100, 'Molten Pickaxe ou equivalente'],
+            'terraria:palladium_ore' => [1, 100, 'Molten Pickaxe ou equivalente'],
+            'terraria:mythril_ore' => [2, 110, 'Cobalt/Palladium Pickaxe ou equivalente'],
+            'terraria:orichalcum_ore' => [2, 110, 'Cobalt/Palladium Pickaxe ou equivalente'],
+            'terraria:adamantite_ore' => [3, 150, 'Mythril/Orichalcum Pickaxe ou equivalente'],
+            'terraria:titanium_ore' => [3, 150, 'Mythril/Orichalcum Pickaxe ou equivalente'],
+        ];
+        $globalId = (string) $item['global_id'];
+        if (! isset($oreTiers[$globalId])) {
+            return null;
+        }
+
+        [$tier, $pickaxePower, $toolLabel] = $oreTiers[$globalId];
+
+        return [
+            'method_key' => 'mine-hardmode-ore-tier-'.$tier,
+            'rank' => self::HARDMODE_RANK,
+            'type' => 'mining',
+            'confidence' => 'curated',
+            'source_item_id' => null,
+            'priority' => 0,
+            'label' => 'Minerar '.(string) $item['display_name'],
+            'requirements' => [
+                [
+                    'type' => 'boss_defeated',
+                    'operator' => 'requires',
+                    'target_type' => 'boss',
+                    'target_key' => 'wall-of-flesh',
+                    'numeric_value' => 7,
+                    'label' => 'Derrotar Wall of Flesh',
+                ],
+                [
+                    'type' => 'world_resource_generated',
+                    'operator' => 'requires',
+                    'target_type' => 'ore_tier',
+                    'target_key' => 'hardmode-ore-tier-'.$tier,
+                    'numeric_value' => $tier,
+                    'label' => 'Gerar o minério de nível '.$tier.' no mundo',
+                ],
+                [
+                    'type' => 'tool_power',
+                    'operator' => 'at_least',
+                    'target_type' => 'pickaxe',
+                    'target_key' => null,
+                    'numeric_value' => $pickaxePower,
+                    'text_value' => $toolLabel,
+                    'label' => 'Usar '.$toolLabel.' ('.$pickaxePower.'% pickaxe power)',
+                ],
+            ],
+        ];
     }
 
     /** @param array<string, mixed> $item */
@@ -646,26 +727,38 @@ class GamePlannerBuilder
 
         $stopWords = ['body', 'head', 'tail', 'left', 'right', 'the', 'of'];
         $tokens = preg_split('/[^a-z0-9]+/', $normalizedName) ?: [];
-        foreach ($tokens as $token) {
-            if (strlen($token) < 4 || in_array($token, $stopWords, true)) {
-                continue;
+        $tokens = array_values(array_filter($tokens, static fn (string $token): bool => $token !== '' && ! in_array($token, $stopWords, true)
+        ));
+        $numbers = array_values(array_filter($tokens, static fn (string $token): bool => ctype_digit($token)));
+        foreach ($numbers as $number) {
+            if (preg_match('/\b'.preg_quote($number, '/').'\b/', $condition) !== 1) {
+                return false;
             }
-            if (preg_match('/\b'.preg_quote($token, '/').'\b/', $condition) === 1) {
+        }
+        $words = array_values(array_filter($tokens, static fn (string $token): bool => ! ctype_digit($token) && strlen($token) >= 4
+        ));
+        if ($words === []) {
+            return false;
+        }
+        foreach ($words as $word) {
+            if (strlen($word) >= 8 && preg_match('/\b'.preg_quote($word, '/').'\b/', $condition) === 1) {
                 return true;
             }
         }
+        $matches = count(array_filter($words, static fn (string $token): bool => preg_match('/\b'.preg_quote($token, '/').'\b/', $condition) === 1
+        ));
 
-        return false;
+        return $matches >= min(2, count($words));
     }
 
-    /** @param array<int, array{rank: int, name: string, score: float}> $bosses */
+    /** @param array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}> $bosses */
     private function conditionFloorRank(string $condition, array $bosses): int
     {
         $rank = 0;
         if (str_contains($condition, 'moon lord')) {
-            $rank = 2000;
+            $rank = self::MOON_LORD_RANK;
         } elseif (str_contains($condition, 'hardmode')) {
-            $rank = 1000;
+            $rank = self::HARDMODE_RANK;
         }
         foreach ($bosses as $boss) {
             if ($this->conditionMentionsBoss($condition, $boss['name'])) {
@@ -677,48 +770,134 @@ class GamePlannerBuilder
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $items
-     * @param  array<int, array{rank: int, type: string, confidence: string}>  $availability
-     * @return list<array{key: string, name: string, rank: int, description: string}>
+     * @param  array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}>  $bosses
+     * @return list<array<string, mixed>>
      */
-    private function deriveMilestones(array $items, array $availability, int $tierCount): array
+    private function requirementsFromCondition(string $condition, array $bosses): array
     {
-        $weaponRanks = [];
-        foreach ($items as $itemId => $item) {
-            if ((float) ($item['stats']['damage'] ?? 0) > 0 && $availability[$itemId]['confidence'] !== 'unknown') {
-                $weaponRanks[] = $availability[$itemId]['rank'];
-            }
+        $requirements = [];
+        if (str_contains($condition, 'hardmode')) {
+            $requirements[] = [
+                'type' => 'boss_defeated',
+                'operator' => 'requires',
+                'target_type' => 'boss',
+                'target_key' => 'wall-of-flesh',
+                'numeric_value' => 7,
+                'label' => 'Derrotar Wall of Flesh',
+            ];
         }
-        sort($weaponRanks, SORT_NUMERIC);
-        $boundaries = [0, 1000, 2000, self::MAX_PROGRESS_RANK];
-        $count = count($weaponRanks);
-        if ($count > 0) {
-            for ($index = 0; $index < $tierCount; $index++) {
-                $position = (int) round(($count - 1) * ($index / max(1, $tierCount - 1)));
-                $boundaries[] = (int) $weaponRanks[$position];
-            }
+        if (str_contains($condition, 'moon lord')) {
+            $requirements[] = [
+                'type' => 'boss_defeated',
+                'operator' => 'requires',
+                'target_type' => 'boss',
+                'target_key' => 'moon-lord',
+                'numeric_value' => 18,
+                'label' => 'Derrotar Moon Lord',
+            ];
         }
-        $boundaries = array_values(array_unique($boundaries));
-        sort($boundaries, SORT_NUMERIC);
+        foreach ($bosses as $boss) {
+            if (! $this->conditionMentionsBoss($condition, $boss['name'])) {
+                continue;
+            }
+            $requirements[] = [
+                'type' => 'boss_defeated',
+                'operator' => 'requires',
+                'target_type' => $boss['type'],
+                'target_key' => $boss['entry_key'],
+                'numeric_value' => $boss['score'],
+                'label' => 'Derrotar '.$boss['name'],
+            ];
+        }
 
-        $milestones = [];
-        foreach ($boundaries as $index => $rank) {
-            $phase = $rank >= 2000 ? 'Post-Moon Lord' : ($rank >= 1000 ? 'Hardmode' : 'Pre-Hardmode');
-            $label = $phase.' — Tier '.($index + 1);
-            if ($rank === 0) {
-                $label = 'Starting availability';
-            } elseif ($rank === 1000) {
-                $label = 'Hardmode threshold';
-            } elseif ($rank === 2000) {
-                $label = 'Post-Moon Lord threshold';
-            } elseif ($rank === self::MAX_PROGRESS_RANK) {
-                $label = 'End of known progression';
+        return $this->uniqueRequirements($requirements);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function floorRequirements(int $rank): array
+    {
+        if ($rank >= self::MOON_LORD_RANK) {
+            return [[
+                'type' => 'boss_defeated',
+                'operator' => 'requires',
+                'target_type' => 'boss',
+                'target_key' => 'moon-lord',
+                'numeric_value' => 18,
+                'label' => 'Derrotar Moon Lord',
+            ]];
+        }
+        if ($rank >= self::HARDMODE_RANK) {
+            return [[
+                'type' => 'boss_defeated',
+                'operator' => 'requires',
+                'target_type' => 'boss',
+                'target_key' => 'wall-of-flesh',
+                'numeric_value' => 7,
+                'label' => 'Derrotar Wall of Flesh',
+            ]];
+        }
+
+        return [];
+    }
+
+    private function floorLabel(int $rank): string
+    {
+        return match (true) {
+            $rank >= self::MOON_LORD_RANK => 'Disponível após derrotar Moon Lord',
+            $rank >= self::HARDMODE_RANK => 'Disponível após derrotar Wall of Flesh',
+            default => 'Disponível no início da jornada',
+        };
+    }
+
+    /** @param list<array<string, mixed>> $requirements */
+    private function uniqueRequirements(array $requirements): array
+    {
+        $seen = [];
+
+        return array_values(array_filter($requirements, static function (array $requirement) use (&$seen): bool {
+            $key = implode('|', [
+                (string) ($requirement['type'] ?? ''),
+                (string) ($requirement['operator'] ?? ''),
+                (string) ($requirement['target_key'] ?? ''),
+                (string) ($requirement['label'] ?? ''),
+            ]);
+            if (isset($seen[$key])) {
+                return false;
             }
+            $seen[$key] = true;
+
+            return true;
+        }));
+    }
+
+    private function normalizeName(string $value): string
+    {
+        $normalized = strtolower(trim($value));
+
+        return preg_replace('/[^a-z0-9]+/', '', $normalized) ?? '';
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $progression
+     * @return list<array<string, mixed>>
+     */
+    private function deriveMilestones(array $progression): array
+    {
+        $milestones = [];
+        foreach ($progression as $entry) {
+            $value = (float) $entry['value'];
+            $type = (string) $entry['type'];
             $milestones[] = [
-                'key' => 'generated-tier-'.($index + 1),
-                'name' => $label,
-                'rank' => $rank,
-                'description' => 'Generated from item acquisition dependencies and objective game data.',
+                'key' => (string) $entry['key'],
+                'name' => (string) $entry['name'],
+                'rank' => (int) round($value * self::RANK_SCALE),
+                'description' => $type === 'start'
+                    ? 'Itens disponíveis antes do primeiro marco da Boss Checklist.'
+                    : 'Marco de progressão importado da Boss Checklist.',
+                'type' => $type,
+                'source_system' => 'boss_checklist',
+                'source_key' => (string) $entry['key'],
+                'progression_value' => $value,
             ];
         }
 
@@ -728,6 +907,7 @@ class GamePlannerBuilder
     /** @param list<int> $archetypeIds */
     private function clearGeneratedData(int $trackId, array $archetypeIds): void
     {
+        DB::table('game_item_unlock_rules')->where('track_id', $trackId)->delete();
         DB::table('game_planners')->where('track_id', $trackId)->delete();
         DB::table('game_item_availability')->where('track_id', $trackId)->delete();
         DB::table('game_item_archetypes')->whereIn('archetype_id', $archetypeIds)
@@ -751,7 +931,10 @@ class GamePlannerBuilder
                 'name' => $milestone['name'],
                 'description' => $milestone['description'],
                 'sort_order' => $milestone['rank'],
-                'milestone_type' => 'generated',
+                'milestone_type' => $milestone['type'],
+                'source_system' => $milestone['source_system'],
+                'source_key' => $milestone['source_key'],
+                'progression_value' => $milestone['progression_value'],
                 'requirements_json' => json_encode(['minimum_rank' => $milestone['rank']], JSON_THROW_ON_ERROR),
                 'metadata_json' => json_encode(['algorithm' => self::ALGORITHM_VERSION], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
@@ -815,6 +998,89 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array<string, mixed>>  $items
+     * @param  array<int, array<string, mixed>>  $availability
+     */
+    private function storeUnlockRules(int $trackId, array $items, array $availability): void
+    {
+        $now = now();
+        $rows = [];
+        $requirementsByRule = [];
+        foreach ($items as $itemId => $item) {
+            $unlock = $availability[$itemId];
+            $globalId = (string) $item['global_id'];
+            $methodKey = (string) $unlock['method_key'];
+            $rows[] = [
+                'track_id' => $trackId,
+                'item_global_id' => $globalId,
+                'method_key' => $methodKey,
+                'method_type' => (string) $unlock['type'],
+                'label' => (string) $unlock['label'],
+                'source_type' => 'derived',
+                'confidence' => (string) $unlock['confidence'],
+                'progression_value' => round(((int) $unlock['rank']) / self::RANK_SCALE, 3),
+                'metadata_json' => json_encode([
+                    'algorithm' => self::ALGORITHM_VERSION,
+                    'rank' => (int) $unlock['rank'],
+                ], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+            $requirementsByRule[$globalId.'|'.$methodKey] = $this->uniqueRequirements(
+                (array) ($unlock['requirements'] ?? [])
+            );
+            if (count($rows) >= 500) {
+                DB::table('game_item_unlock_rules')->insert($rows);
+                $rows = [];
+            }
+        }
+        if ($rows !== []) {
+            DB::table('game_item_unlock_rules')->insert($rows);
+        }
+
+        $ruleIds = DB::table('game_item_unlock_rules')->where('track_id', $trackId)
+            ->get(['id', 'item_global_id', 'method_key'])->mapWithKeys(static function (object $row): array {
+                $data = (array) $row;
+
+                return [(string) $data['item_global_id'].'|'.(string) $data['method_key'] => (int) $data['id']];
+            });
+        $conditionRows = [];
+        foreach ($requirementsByRule as $ruleKey => $requirements) {
+            $ruleId = $ruleIds->get($ruleKey);
+            if ($ruleId === null) {
+                continue;
+            }
+            foreach ($requirements as $index => $requirement) {
+                $conditionRows[] = [
+                    'unlock_rule_id' => $ruleId,
+                    'condition_group' => 'all',
+                    'condition_type' => (string) ($requirement['type'] ?? 'game_condition'),
+                    'operator' => (string) ($requirement['operator'] ?? 'requires'),
+                    'target_type' => $requirement['target_type'] ?? null,
+                    'target_key' => $requirement['target_key'] ?? null,
+                    'numeric_value' => $requirement['numeric_value'] ?? null,
+                    'text_value' => $requirement['text_value'] ?? null,
+                    'value_json' => isset($requirement['value_json'])
+                        ? json_encode($requirement['value_json'], JSON_THROW_ON_ERROR)
+                        : null,
+                    'label' => (string) ($requirement['label'] ?? 'Cumprir a condição'),
+                    'sort_order' => $index,
+                    'metadata_json' => null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+                if (count($conditionRows) >= 500) {
+                    DB::table('game_item_unlock_conditions')->insert($conditionRows);
+                    $conditionRows = [];
+                }
+            }
+        }
+        if ($conditionRows !== []) {
+            DB::table('game_item_unlock_conditions')->insert($conditionRows);
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
      * @param  array<int, array{rank: int, type: string, confidence: string}>  $availability
      * @param  array<string, mixed>  $archetype
      * @return list<array<string, mixed>>
@@ -852,12 +1118,15 @@ class GamePlannerBuilder
             if ((! $isEquipment && ! $matchesArchetype) || $belongsToAnotherClass) {
                 continue;
             }
-            $score = $this->powerScore($item, $role, (string) ($metadata['playstyle'] ?? ''));
+            $vector = $this->powerVector($item, $role, (string) ($metadata['playstyle'] ?? ''));
+            $score = $this->scoreVector($vector, 0);
             if ($score <= 0) {
                 continue;
             }
             if ($isEquipment) {
-                $score *= $matchesArchetype || $supportsClass ? 1.2 : 0.9;
+                $multiplier = $matchesArchetype || $supportsClass ? 1.2 : 0.9;
+                $vector = array_map(static fn (float $value): float => $value * $multiplier, $vector);
+                $score = $this->scoreVector($vector, 0);
             }
             if ($availability[$itemId]['confidence'] === 'unknown') {
                 continue;
@@ -867,6 +1136,7 @@ class GamePlannerBuilder
                 'global_id' => (string) $item['global_id'],
                 'role' => $role,
                 'score' => round($score, 6),
+                'score_vector' => array_map(static fn (float $value): float => round($value, 6), $vector),
                 'rank' => $availability[$itemId]['rank'],
                 'confidence' => $availability[$itemId]['confidence'],
             ];
@@ -938,7 +1208,8 @@ class GamePlannerBuilder
     }
 
     /** @param array<string, mixed> $item */
-    private function powerScore(array $item, string $role, string $playstyle): float
+    /** @return array{offense: float, defense: float, utility: float} */
+    private function powerVector(array $item, string $role, string $playstyle): array
     {
         $stats = $item['stats'];
         if ($role === 'weapon') {
@@ -948,20 +1219,72 @@ class GamePlannerBuilder
             $knockback = (float) ($stats['knockback'] ?? 0);
             $mana = (float) ($stats['mana_cost'] ?? 0);
             $velocity = (float) ($stats['shoot_speed'] ?? $stats['velocity'] ?? 0);
-            $score = $damage * (60 / $useTime) * (1 + $critical / 100) + log1p(max(0, $knockback)) * 2 + $velocity * 0.2 - $mana * 0.1;
+            $offense = $damage * (60 / $useTime) * (1 + $critical / 100);
             if ($playstyle === 'stealth') {
-                $score = pow(max(1, $damage), 1.15) + $critical + $knockback;
+                $offense = pow(max(1, $damage), 1.15) + $critical + $knockback;
             }
 
-            return $score;
+            return [
+                'offense' => $offense,
+                'defense' => 0.0,
+                'utility' => log1p(max(0, $knockback)) * 2 + $velocity * 0.2 - $mana * 0.1,
+            ];
         }
 
         $tooltip = strtolower((string) ($item['tooltip'] ?? ''));
-        preg_match_all('/(\d+(?:\.\d+)?)\s*%/', $tooltip, $matches);
-        $percentages = array_sum(array_map('floatval', $matches[1]));
         $defense = (float) ($stats['defense'] ?? 0);
+        $vector = ['offense' => 0.0, 'defense' => $defense * 5, 'utility' => 0.0];
+        preg_match_all('/(\d+(?:\.\d+)?)\s*%\s*([^.;,\n]*)/', $tooltip, $matches, PREG_SET_ORDER);
+        foreach ($matches as $match) {
+            $value = (float) $match[1];
+            $effect = (string) ($match[2] ?? '');
+            if ($this->containsAny($effect, ['damage reduction', 'endurance', 'dodge', 'life', 'defense', 'damage taken'])) {
+                $vector['defense'] += $value;
+            } elseif ($this->containsAny($effect, ['damage', 'critical', 'crit', 'attack speed', 'melee speed', 'minion', 'stealth'])) {
+                $vector['offense'] += $value;
+            } else {
+                $vector['utility'] += $value;
+            }
+        }
+        if (str_contains($tooltip, 'immun')) {
+            $vector['defense'] += 12;
+        }
+        if (str_contains($tooltip, 'regeneration') || str_contains($tooltip, 'regen')) {
+            $vector['defense'] += 8;
+        }
+        if (str_contains($tooltip, 'mana') || str_contains($tooltip, 'movement') || str_contains($tooltip, 'flight')) {
+            $vector['utility'] += 8;
+        }
+        if (str_contains($tooltip, 'slot')) {
+            $vector['utility'] += 15;
+        }
 
-        return $defense * 5 + $percentages + (str_contains($tooltip, 'slot') ? 15 : 0);
+        return $vector;
+    }
+
+    /** @param array{offense: float, defense: float, utility: float} $vector */
+    private function scoreVector(array $vector, int $balance): float
+    {
+        $balance = max(-100, min(100, $balance));
+        if ($balance <= 0) {
+            $position = ($balance + 100) / 100;
+            $weights = [
+                'offense' => 0.35 + (0.75 - 0.35) * $position,
+                'defense' => 1.0 + (0.75 - 1.0) * $position,
+                'utility' => 0.45 + (0.5 - 0.45) * $position,
+            ];
+        } else {
+            $position = $balance / 100;
+            $weights = [
+                'offense' => 0.75 + (1.0 - 0.75) * $position,
+                'defense' => 0.75 + (0.15 - 0.75) * $position,
+                'utility' => 0.5 + (0.3 - 0.5) * $position,
+            ];
+        }
+
+        return $vector['offense'] * $weights['offense']
+            + $vector['defense'] * $weights['defense']
+            + $vector['utility'] * $weights['utility'];
     }
 
     /** @param list<array<string, mixed>> $candidates */
@@ -976,7 +1299,10 @@ class GamePlannerBuilder
                 'role' => $candidate['role'],
                 'confidence' => $candidate['confidence'],
                 'source_type' => 'derived',
-                'metadata_json' => json_encode(['score' => $candidate['score']], JSON_THROW_ON_ERROR),
+                'metadata_json' => json_encode([
+                    'score' => $candidate['score'],
+                    'score_vector' => $candidate['score_vector'],
+                ], JSON_THROW_ON_ERROR),
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -1022,6 +1348,8 @@ class GamePlannerBuilder
                 'algorithm' => self::ALGORITHM_VERSION,
                 'candidate_count' => count($candidates),
                 'minimum_upgrade_percent' => $minimumUpgrade * 100,
+                'recommendation_limit' => $recommendationLimit,
+                'balance_range' => [-100, 100],
             ], JSON_THROW_ON_ERROR),
             'created_at' => $now,
             'updated_at' => $now,
@@ -1036,8 +1364,20 @@ class GamePlannerBuilder
                 }
             }
             foreach ($byRole as &$roleCandidates) {
-                usort($roleCandidates, static fn (array $left, array $right): int => $right['score'] <=> $left['score']);
-                $roleCandidates = array_slice($roleCandidates, 0, $recommendationLimit);
+                $selected = [];
+                foreach ([-100, 0, 100] as $balance) {
+                    $ranked = $roleCandidates;
+                    usort($ranked, fn (array $left, array $right): int => $this->scoreVector($right['score_vector'], $balance)
+                        <=> $this->scoreVector($left['score_vector'], $balance)
+                    );
+                    foreach (array_slice($ranked, 0, $recommendationLimit) as $candidate) {
+                        $selected[$candidate['global_id']] = $candidate;
+                    }
+                }
+                $roleCandidates = array_values($selected);
+                usort($roleCandidates, fn (array $left, array $right): int => $this->scoreVector($right['score_vector'], 0)
+                    <=> $this->scoreVector($left['score_vector'], 0)
+                );
             }
             unset($roleCandidates);
 
@@ -1069,6 +1409,12 @@ class GamePlannerBuilder
                         'source_url' => null,
                         'conditions_json' => json_encode([
                             'score' => $candidate['score'],
+                            'score_vector' => $candidate['score_vector'],
+                            'anchor_scores' => [
+                                'defense' => round($this->scoreVector($candidate['score_vector'], -100), 6),
+                                'balanced' => round($this->scoreVector($candidate['score_vector'], 0), 6),
+                                'damage' => round($this->scoreVector($candidate['score_vector'], 100), 6),
+                            ],
                             'availability_rank' => $candidate['rank'],
                         ], JSON_THROW_ON_ERROR),
                         'created_at' => $now,

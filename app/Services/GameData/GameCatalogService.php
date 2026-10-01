@@ -171,6 +171,7 @@ class GameCatalogService
                 ->get(['ir.relationship_type', 'source.global_id', 'source.display_name', 'ir.metadata_json'])
                 ->map(fn (stdClass $relationship): array => $this->objectWithDecodedJson($relationship, ['metadata_json'])),
             'sources' => $this->itemSources($itemId),
+            'unlocked_when' => $planner['unlocked_when'],
             'planner' => $planner,
             'completeness' => [
                 'has_stats' => $stats->isNotEmpty(),
@@ -484,7 +485,7 @@ class GameCatalogService
     private function plannerData(string $globalId): array
     {
         if (! Schema::hasTable('game_item_availability')) {
-            return ['availability' => [], 'recommendations' => []];
+            return ['availability' => [], 'recommendations' => [], 'unlocked_when' => []];
         }
 
         $availability = DB::table('game_item_availability as a')
@@ -508,7 +509,39 @@ class GameCatalogService
                 'psi.priority', 'psi.quantity', 'psi.notes', 'psi.source_url', 'psi.conditions_json',
             ])->map(fn (stdClass $row): array => $this->objectWithDecodedJson($row, ['conditions_json']));
 
-        return ['availability' => $availability, 'recommendations' => $recommendations];
+        $unlockedWhen = collect();
+        if (Schema::hasTable('game_item_unlock_rules') && Schema::hasTable('game_item_unlock_conditions')) {
+            $rules = DB::table('game_item_unlock_rules as r')
+                ->join('game_progression_tracks as t', 't.id', '=', 'r.track_id')
+                ->where('r.item_global_id', $globalId)
+                ->orderBy('r.progression_value')
+                ->get([
+                    'r.id', 't.track_key', 'r.method_key', 'r.method_type', 'r.label', 'r.confidence',
+                    'r.progression_value', 'r.metadata_json',
+                ]);
+            $ruleIds = $rules->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
+            $conditions = $ruleIds === [] ? collect() : DB::table('game_item_unlock_conditions')
+                ->whereIn('unlock_rule_id', $ruleIds)->orderBy('sort_order')->get()->groupBy('unlock_rule_id');
+            $unlockedWhen = $rules->map(function (stdClass $rule) use ($conditions): array {
+                $row = $this->objectWithDecodedJson($rule, ['metadata_json']);
+                $ruleId = (int) $row['id'];
+                unset($row['id']);
+                $row['conditions'] = $conditions->get($ruleId, collect())->map(
+                    fn (stdClass $condition): array => $this->objectWithDecodedJson(
+                        $condition,
+                        ['value_json', 'metadata_json']
+                    )
+                )->values()->all();
+
+                return $row;
+            });
+        }
+
+        return [
+            'availability' => $availability,
+            'recommendations' => $recommendations,
+            'unlocked_when' => $unlockedWhen->values()->all(),
+        ];
     }
 
     /**
