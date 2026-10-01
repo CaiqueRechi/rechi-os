@@ -15,16 +15,22 @@ class GameDataDashboardTest extends TestCase
         $this->get('/dashboard/game-data')->assertRedirect(route('login'));
     }
 
-    public function test_only_admin_can_open_the_game_planner_page(): void
+    public function test_only_admin_can_open_the_game_library_and_terraria_page(): void
     {
-        $this->get('/dashboard/game-planner')->assertRedirect(route('login'));
+        $this->get('/dashboard/biblioteca')->assertRedirect(route('login'));
+        $this->get('/dashboard/biblioteca/terraria')->assertRedirect(route('login'));
 
         $user = User::factory()->create(['email_verified_at' => now()]);
-        $this->actingAs($user)->get('/dashboard/game-planner')->assertForbidden();
+        $this->actingAs($user)->get('/dashboard/biblioteca')->assertForbidden();
+        $this->actingAs($user)->get('/dashboard/biblioteca/terraria')->assertForbidden();
 
         $admin = User::factory()->create(['is_admin' => true, 'email_verified_at' => now()]);
-        $this->actingAs($admin)->get('/dashboard/game-planner')
+        $this->actingAs($admin)->get('/dashboard/biblioteca')
+            ->assertOk()->assertInertia(fn ($page) => $page->component('game-library/index'));
+        $this->actingAs($admin)->get('/dashboard/biblioteca/terraria')
             ->assertOk()->assertInertia(fn ($page) => $page->component('game-data/index'));
+        $this->actingAs($admin)->get('/dashboard/game-planner')
+            ->assertRedirect('/dashboard/biblioteca/terraria');
     }
 
     public function test_non_admin_cannot_access_game_data(): void

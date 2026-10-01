@@ -829,7 +829,7 @@ export default function GameDataIndex() {
 
     return (
         <>
-            <Head title="Game Planner" />
+            <Head title="Terraria" />
             <main className="flex min-w-0 flex-1 flex-col gap-5 p-4 md:p-6">
                 <header className="overflow-hidden rounded-xl border border-border bg-card p-5 md:p-7">
                     <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
@@ -1119,6 +1119,7 @@ export default function GameDataIndex() {
 GameDataIndex.layout = {
     breadcrumbs: [
         { title: 'Dashboard', href: '/dashboard' },
-        { title: 'Game Planner', href: '/dashboard/game-planner' },
+        { title: 'Biblioteca', href: '/dashboard/biblioteca' },
+        { title: 'Terraria', href: '/dashboard/biblioteca/terraria' },
     ],
 };

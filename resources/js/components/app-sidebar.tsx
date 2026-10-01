@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { FolderGit2, Gamepad2, LayoutGrid } from 'lucide-react';
+import { FolderGit2, LayoutGrid, Library } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -35,9 +35,9 @@ export function AppSidebar() {
         ...(auth.user.is_admin
             ? [
                   {
-                      title: 'Game Planner',
-                      href: '/dashboard/game-planner',
-                      icon: Gamepad2,
+                      title: 'Biblioteca',
+                      href: '/dashboard/biblioteca',
+                      icon: Library,
                   },
               ]
             : []),

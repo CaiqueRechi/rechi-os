@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\AssistantController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\Dashboard\GameDataController;
+use App\Http\Controllers\Dashboard\GameLibraryDashboardController;
 use App\Http\Controllers\Dashboard\GamePlannerDashboardController;
 use App\Http\Controllers\PortfolioController;
 use App\Http\Controllers\SalemActionController;
@@ -19,7 +20,11 @@ Route::post('/salem/actions', SalemActionController::class)->middleware('throttl
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::get('admin', AdminController::class)->middleware('can:managePortfolio')->name('admin.dashboard');
-    Route::get('dashboard/game-planner', GamePlannerDashboardController::class)
+    Route::get('dashboard/biblioteca', GameLibraryDashboardController::class)
+        ->middleware('can:managePortfolio')->name('dashboard.library');
+    Route::get('dashboard/biblioteca/terraria', GamePlannerDashboardController::class)
+        ->middleware('can:managePortfolio')->name('dashboard.library.terraria');
+    Route::redirect('dashboard/game-planner', '/dashboard/biblioteca/terraria')
         ->middleware('can:managePortfolio')->name('dashboard.game-planner');
 
     Route::prefix('dashboard/game-data')
