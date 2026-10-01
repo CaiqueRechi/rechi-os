@@ -749,7 +749,7 @@ class GamePlannerBuilder
         $matches = count(array_filter($words, static fn (string $token): bool => preg_match('/\b'.preg_quote($token, '/').'\b/', $condition) === 1
         ));
 
-        return $matches >= min(2, count($words));
+        return $matches >= 2;
     }
 
     /** @param array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}> $bosses */
