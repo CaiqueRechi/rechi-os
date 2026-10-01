@@ -127,21 +127,13 @@ type ItemDetail = {
     >;
     categories: Array<{ name: string }>;
     combat_classes: Array<{ name: string }>;
-    tags: Array<{ name: string }>;
-    properties: Array<Record<string, unknown>>;
-    progression: Array<Record<string, unknown>>;
     drops: Array<Record<string, unknown>>;
     recipes: Array<Record<string, unknown>>;
     used_in_recipes: Array<Record<string, unknown>>;
     acquisition_methods: Array<Record<string, unknown>>;
     shops: Array<Record<string, unknown>>;
-    relationships: Array<Record<string, unknown>>;
-    related_from: Array<Record<string, unknown>>;
-    sources: Array<Record<string, unknown>>;
-    completeness?: Record<string, unknown>;
     unlocked_when: Array<Record<string, unknown>>;
     planner?: {
-        availability?: Array<Record<string, unknown>>;
         recommendations?: Array<Record<string, unknown>>;
     };
 };
@@ -190,92 +182,306 @@ function formatStatValue(value: unknown): string {
     return String(value);
 }
 
-function formatDetailValue(value: unknown): string {
+const playerStatLabels: Record<string, string> = {
+    damage: 'Dano',
+    defense: 'Defesa',
+    knockback: 'Knockback',
+    critical: 'Crítico',
+    crit: 'Crítico',
+    critical_chance: 'Crítico',
+    use_time: 'Tempo de uso',
+    use_animation: 'Velocidade de uso',
+    shoot_speed: 'Velocidade do projétil',
+    mana: 'Mana',
+    mana_cost: 'Custo de mana',
+    armor_penetration: 'Penetração de armadura',
+    pick: 'Poder de mineração',
+    axe: 'Poder de corte',
+    hammer: 'Poder de martelo',
+    fishing_power: 'Poder de pesca',
+    bait_power: 'Poder de isca',
+    heal_life: 'Cura',
+    life_regen: 'Regeneração de vida',
+    damage_reduction: 'Redução de dano',
+};
+
+type PlayerInfoCard = {
+    key: string;
+    title: string;
+    badge?: string;
+    rows?: Array<{ label: string; value: string }>;
+    bullets?: string[];
+};
+
+function textValue(value: unknown): string | null {
     if (value === null || value === undefined || value === '') {
-        return '—';
-    }
-
-    if (typeof value === 'boolean') {
-        return value ? 'Sim' : 'Não';
-    }
-
-    if (typeof value === 'number') {
-        return formatStatValue(value);
-    }
-
-    if (typeof value === 'object') {
-        return JSON.stringify(value);
+        return null;
     }
 
     return String(value);
 }
 
-function recordTitle(record: Record<string, unknown>, index: number): string {
-    for (const key of [
-        'display_name',
-        'item_name',
-        'result_name',
-        'npc_name',
-        'source_item_name',
-        'vendor_name',
-        'name',
-        'global_id',
-        'method_type',
-    ]) {
-        if (record[key]) {
-            return String(record[key]);
-        }
+function numericPlayerStat(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
     }
 
-    return `Registro ${index + 1}`;
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const match = value.match(/-?\d+(?:\.\d+)?/);
+    return match ? Number(match[0]) : null;
 }
 
-function DetailRecords({
+function PlayerInfoSection({
     title,
-    records,
+    cards,
 }: {
     title: string;
-    records: Array<Record<string, unknown>>;
+    cards: PlayerInfoCard[];
 }) {
-    if (records.length === 0) {
+    if (cards.length === 0) {
         return null;
     }
 
     return (
         <section>
             <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
-                {title}{' '}
-                <span className="text-[#81768f]">({records.length})</span>
+                {title} <span className="text-[#81768f]">({cards.length})</span>
             </h3>
             <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-                {records.map((record, index) => (
+                {cards.map((card) => (
                     <article
-                        key={`${title}-${index}-${String(record.global_id ?? record.id ?? '')}`}
+                        key={card.key}
                         className="min-w-0 overflow-hidden rounded-lg border border-[#4b405f] bg-[#171424] p-3"
                     >
-                        <strong className="block text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
-                            {recordTitle(record, index)}
-                        </strong>
-                        <dl className="mt-2 grid gap-1.5 text-xs">
-                            {Object.entries(record).map(([key, value]) => (
-                                <div
-                                    key={key}
-                                    className="grid min-w-0 grid-cols-1 gap-1 border-t border-white/5 pt-1.5 sm:grid-cols-[minmax(90px,0.35fr)_minmax(0,1fr)] sm:gap-2"
-                                >
-                                    <dt className="truncate font-bold text-[#81768f] uppercase">
-                                        {formatLabel(key)}
-                                    </dt>
-                                    <dd className="min-w-0 [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-[#c9c1d7]">
-                                        {formatDetailValue(value)}
-                                    </dd>
-                                </div>
-                            ))}
-                        </dl>
+                        <div className="flex items-start justify-between gap-3">
+                            <strong className="block text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
+                                {card.title}
+                            </strong>
+                            {card.badge && (
+                                <span className="shrink-0 rounded-full border border-[#d7a84b]/30 bg-[#d7a84b]/10 px-2 py-0.5 text-[9px] font-bold text-[#e8cf8b] uppercase">
+                                    {card.badge}
+                                </span>
+                            )}
+                        </div>
+                        {card.rows && card.rows.length > 0 && (
+                            <dl className="mt-2 grid gap-1.5 text-xs">
+                                {card.rows.map((row) => (
+                                    <div
+                                        key={`${row.label}-${row.value}`}
+                                        className="flex min-w-0 items-start justify-between gap-3 border-t border-white/5 pt-1.5"
+                                    >
+                                        <dt className="font-bold text-[#81768f] uppercase">
+                                            {row.label}
+                                        </dt>
+                                        <dd className="min-w-0 text-right [overflow-wrap:anywhere] break-words text-[#c9c1d7]">
+                                            {row.value}
+                                        </dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        )}
+                        {card.bullets && card.bullets.length > 0 && (
+                            <ul className="mt-3 grid gap-1.5 text-xs text-[#c9c1d7]">
+                                {card.bullets.map((bullet, index) => (
+                                    <li
+                                        key={`${bullet}-${index}`}
+                                        className="flex min-w-0 gap-2 [overflow-wrap:anywhere] break-words"
+                                    >
+                                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#d7a84b]" />
+                                        {bullet}
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                     </article>
                 ))}
             </div>
         </section>
     );
+}
+
+function RecipeDetails({
+    title,
+    records,
+    usedIn = false,
+}: {
+    title: string;
+    records: Array<Record<string, unknown>>;
+    usedIn?: boolean;
+}) {
+    const cards = records.map((record, index): PlayerInfoCard => {
+        const ingredients = Array.isArray(record.ingredients)
+            ? (record.ingredients as Array<Record<string, unknown>>)
+            : [];
+        const stations = Array.isArray(record.stations)
+            ? (record.stations as Array<Record<string, unknown>>)
+            : [];
+        const bullets = ingredients.map((ingredient) => {
+            const name =
+                textValue(ingredient.item_name) ??
+                textValue(ingredient.recipe_group_name) ??
+                textValue(ingredient.unresolved_name) ??
+                'Ingrediente';
+            const amount = Number(ingredient.amount ?? 1);
+
+            return `${Number.isFinite(amount) ? amount : 1}× ${name}`;
+        });
+        const stationNames = stations
+            .map((station) => textValue(station.name))
+            .filter((name): name is string => name !== null);
+        const rows: PlayerInfoCard['rows'] = [];
+        if (stationNames.length > 0) {
+            rows.push({ label: 'Estação', value: stationNames.join(', ') });
+        }
+
+        const resultAmount = Number(record.result_amount ?? 1);
+        if (usedIn && Number.isFinite(resultAmount) && resultAmount > 1) {
+            rows.push({ label: 'Produz', value: String(resultAmount) });
+        }
+
+        return {
+            key: `recipe-${String(record.global_id ?? index)}`,
+            title: usedIn
+                ? (textValue(record.result_name) ?? 'Item produzido')
+                : `Receita ${index + 1}`,
+            badge: record.is_historical ? 'Receita antiga' : undefined,
+            rows,
+            bullets,
+        };
+    });
+
+    return <PlayerInfoSection title={title} cards={cards} />;
+}
+
+function formatDropChance(record: Record<string, unknown>): string | null {
+    const raw = textValue(record.chance_raw);
+    if (raw) {
+        return raw;
+    }
+
+    const chance = Number(record.chance);
+    if (!Number.isFinite(chance)) {
+        return null;
+    }
+
+    const percentage = chance <= 1 ? chance * 100 : chance;
+    return `${formatStatValue(percentage)}%`;
+}
+
+function DropDetails({ records }: { records: Array<Record<string, unknown>> }) {
+    const cards = records.map((record, index): PlayerInfoCard => {
+        const minimum = Number(record.quantity_min ?? 1);
+        const maximum = Number(record.quantity_max ?? minimum);
+        const quantity =
+            minimum === maximum ? String(minimum) : `${minimum}–${maximum}`;
+        const rows: PlayerInfoCard['rows'] = [];
+        const chance = formatDropChance(record);
+        if (chance) {
+            rows.push({ label: 'Chance', value: chance });
+        }
+        if (Number.isFinite(minimum) && Number.isFinite(maximum)) {
+            rows.push({ label: 'Quantidade', value: quantity });
+        }
+        const difficulty = textValue(record.difficulty);
+        if (difficulty) {
+            rows.push({ label: 'Dificuldade', value: difficulty });
+        }
+        const condition = textValue(record.condition_text);
+        if (condition) {
+            rows.push({ label: 'Condição', value: condition });
+        }
+
+        return {
+            key: `drop-${String(record.global_id ?? index)}`,
+            title:
+                textValue(record.npc_name) ??
+                textValue(record.source_item_name) ??
+                textValue(record.unresolved_source_name) ??
+                'Fonte desconhecida',
+            rows,
+        };
+    });
+
+    return <PlayerInfoSection title="Drops" cards={cards} />;
+}
+
+function AcquisitionDetails({
+    records,
+}: {
+    records: Array<Record<string, unknown>>;
+}) {
+    const methodNames: Record<string, string> = {
+        craft: 'Fabricação',
+        recipe: 'Fabricação',
+        drop: 'Drop',
+        shop: 'Loja',
+        npc: 'NPC',
+        fishing: 'Pesca',
+        chest: 'Baú',
+        mining: 'Mineração',
+    };
+    const cards = records.map((record, index): PlayerInfoCard => {
+        const method = textValue(record.method_type) ?? 'Outra forma';
+        const description = textValue(record.description);
+        const npc = textValue(record.npc_name);
+
+        return {
+            key: `acquisition-${String(record.global_id ?? index)}`,
+            title: methodNames[method.toLowerCase()] ?? formatLabel(method),
+            rows: npc ? [{ label: 'NPC', value: npc }] : [],
+            bullets: description ? [description] : [],
+        };
+    });
+
+    return <PlayerInfoSection title="Outras formas de obter" cards={cards} />;
+}
+
+function ShopDetails({ records }: { records: Array<Record<string, unknown>> }) {
+    const cards = records.map((record, index): PlayerInfoCard => {
+        const price = textValue(record.price);
+        const currency = textValue(record.currency_name) ?? 'moedas';
+
+        return {
+            key: `shop-${String(record.shop_global_id ?? index)}`,
+            title:
+                textValue(record.vendor_name) ??
+                textValue(record.shop_name) ??
+                'Loja',
+            rows: price
+                ? [{ label: 'Preço', value: `${price} ${currency}` }]
+                : [],
+        };
+    });
+
+    return <PlayerInfoSection title="Onde comprar" cards={cards} />;
+}
+
+function RecommendationDetails({
+    records,
+}: {
+    records: Array<Record<string, unknown>>;
+}) {
+    const cards = records.map((record, index): PlayerInfoCard => ({
+        key: `recommendation-${String(record.planner_key ?? '')}-${String(record.milestone_key ?? index)}`,
+        title: textValue(record.archetype_name) ?? 'Build recomendada',
+        rows: [
+            {
+                label: 'Momento',
+                value: textValue(record.milestone_name) ?? 'Não informado',
+            },
+            {
+                label: 'Uso',
+                value: formatLabel(
+                    textValue(record.slot_type) ?? 'equipamento',
+                ),
+            },
+        ],
+    }));
+
+    return <PlayerInfoSection title="Recomendado para" cards={cards} />;
 }
 
 function UnlockRequirements({
@@ -297,6 +503,19 @@ function UnlockRequirements({
                     const conditions = Array.isArray(record.conditions)
                         ? (record.conditions as Array<Record<string, unknown>>)
                         : [];
+                    const methodType = String(
+                        record.method_type ?? 'unknown',
+                    ).toLowerCase();
+                    const methodNames: Record<string, string> = {
+                        npc: 'Inimigo',
+                        boss: 'Chefe',
+                        recipe: 'Receita',
+                        craft: 'Fabricação',
+                        mining: 'Mineração',
+                        event: 'Evento',
+                        shop: 'Loja',
+                        progression: 'Progressão',
+                    };
 
                     return (
                         <article
@@ -308,9 +527,8 @@ function UnlockRequirements({
                                     {String(record.label ?? 'Desbloquear item')}
                                 </strong>
                                 <span className="rounded border border-[#d7a84b]/30 bg-[#d7a84b]/10 px-2 py-1 text-[9px] font-black tracking-wider text-[#e8cf8b] uppercase">
-                                    {formatLabel(
-                                        String(record.method_type ?? 'unknown'),
-                                    )}
+                                    {methodNames[methodType] ??
+                                        formatLabel(methodType)}
                                 </span>
                             </div>
                             {conditions.length > 0 && (
@@ -621,6 +839,38 @@ function ItemDetailDialog({
     onClose: () => void;
 }) {
     const item = detail?.item;
+    const playerStats = detail
+        ? Object.entries(detail.stats_map)
+              .map(([key, stat]) => ({
+                  key,
+                  label: playerStatLabels[key],
+                  value: numericPlayerStat(stat.value),
+                  unit:
+                      stat.unit ??
+                      ([
+                          'critical',
+                          'crit',
+                          'critical_chance',
+                          'damage_reduction',
+                      ].includes(key)
+                          ? '%'
+                          : ''),
+              }))
+              .filter(
+                  (
+                      stat,
+                  ): stat is {
+                      key: string;
+                      label: string;
+                      value: number;
+                      unit: string;
+                  } => Boolean(stat.label) && stat.value !== null,
+              )
+        : [];
+    const hasClassification = Boolean(
+        detail &&
+        (detail.combat_classes.length > 0 || detail.categories.length > 0),
+    );
 
     return (
         <Dialog
@@ -642,9 +892,6 @@ function ItemDetailDialog({
                                     <DialogTitle className="mt-1 text-xl font-black [overflow-wrap:anywhere] break-words text-[#fff8dc] sm:text-2xl">
                                         {item.display_name}
                                     </DialogTitle>
-                                    <DialogDescription className="mt-1 text-xs break-all text-[#aaa1bd]">
-                                        {item.global_id}
-                                    </DialogDescription>
                                 </div>
                             </div>
                         </DialogHeader>
@@ -656,127 +903,80 @@ function ItemDetailDialog({
                                 </p>
                             )}
 
-                            <section>
-                                <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
-                                    Status
-                                </h3>
-                                <div className="grid min-w-0 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-                                    {Object.entries(detail.stats_map).map(
-                                        ([key, stat]) => (
+                            {playerStats.length > 0 && (
+                                <section>
+                                    <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                                        Atributos
+                                    </h3>
+                                    <div className="grid min-w-0 gap-3 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
+                                        {playerStats.map((stat) => (
                                             <div
-                                                key={key}
+                                                key={stat.key}
                                                 className="min-w-0 overflow-hidden rounded-lg border border-[#4b405f] bg-[#171424] p-3"
                                             >
                                                 <small className="block text-[10px] font-bold text-[#81768f] uppercase">
-                                                    {formatLabel(key)}
+                                                    {stat.label}
                                                 </small>
                                                 <strong className="mt-1 block text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
                                                     {formatStatValue(
                                                         stat.value,
                                                     )}{' '}
-                                                    {stat.unit ?? ''}
+                                                    {stat.unit}
                                                 </strong>
                                             </div>
-                                        ),
-                                    )}
-                                </div>
-                            </section>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
 
-                            <section>
-                                <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
-                                    Classificação
-                                </h3>
-                                <div className="flex flex-wrap gap-2 text-xs">
-                                    {detail.combat_classes.map((entry) => (
-                                        <span
-                                            key={`class-${entry.name}`}
-                                            className="max-w-full rounded-full border border-[#d7a84b]/35 bg-[#d7a84b]/10 px-3 py-1 [overflow-wrap:anywhere] break-words text-[#e8cf8b]"
-                                        >
-                                            <Swords className="mr-1 inline size-3" />
-                                            {entry.name}
-                                        </span>
-                                    ))}
-                                    {detail.categories.map((entry) => (
-                                        <span
-                                            key={`category-${entry.name}`}
-                                            className="max-w-full rounded-full border border-[#79649a]/50 bg-[#302744] px-3 py-1 [overflow-wrap:anywhere] break-words text-[#c9c1d7]"
-                                        >
-                                            <Shield className="mr-1 inline size-3" />
-                                            {entry.name}
-                                        </span>
-                                    ))}
-                                    {detail.tags.map((entry) => (
-                                        <span
-                                            key={`tag-${entry.name}`}
-                                            className="max-w-full rounded-full border border-[#4b405f] bg-[#171424] px-3 py-1 [overflow-wrap:anywhere] break-words text-[#aaa1bd]"
-                                        >
-                                            {entry.name}
-                                        </span>
-                                    ))}
-                                </div>
-                            </section>
+                            {hasClassification && (
+                                <section>
+                                    <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                                        Classificação
+                                    </h3>
+                                    <div className="flex flex-wrap gap-2 text-xs">
+                                        {detail.combat_classes.map((entry) => (
+                                            <span
+                                                key={`class-${entry.name}`}
+                                                className="max-w-full rounded-full border border-[#d7a84b]/35 bg-[#d7a84b]/10 px-3 py-1 [overflow-wrap:anywhere] break-words text-[#e8cf8b]"
+                                            >
+                                                <Swords className="mr-1 inline size-3" />
+                                                {entry.name}
+                                            </span>
+                                        ))}
+                                        {detail.categories.map((entry) => (
+                                            <span
+                                                key={`category-${entry.name}`}
+                                                className="max-w-full rounded-full border border-[#79649a]/50 bg-[#302744] px-3 py-1 [overflow-wrap:anywhere] break-words text-[#c9c1d7]"
+                                            >
+                                                <Shield className="mr-1 inline size-3" />
+                                                {entry.name}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
 
-                            <DetailRecords
-                                title="Identificação e metadados"
-                                records={[item]}
-                            />
-                            <DetailRecords
-                                title="Propriedades"
-                                records={detail.properties}
-                            />
-                            <DetailRecords
-                                title="Progressão"
-                                records={detail.progression}
-                            />
-                            <DetailRecords
-                                title="Receitas para criar"
-                                records={detail.recipes}
-                            />
-                            <DetailRecords
-                                title="Usado em receitas"
-                                records={detail.used_in_recipes}
-                            />
-                            <DetailRecords
-                                title="Drops"
-                                records={detail.drops}
-                            />
                             <UnlockRequirements
                                 records={detail.unlocked_when}
                             />
-                            <DetailRecords
-                                title="Formas de obtenção"
+                            <RecipeDetails
+                                title="Receitas para criar"
+                                records={detail.recipes}
+                            />
+                            <DropDetails records={detail.drops} />
+                            <ShopDetails records={detail.shops} />
+                            <AcquisitionDetails
                                 records={detail.acquisition_methods}
                             />
-                            <DetailRecords
-                                title="Lojas"
-                                records={detail.shops}
+                            <RecipeDetails
+                                title="Usado em receitas"
+                                records={detail.used_in_recipes}
+                                usedIn
                             />
-                            <DetailRecords
-                                title="Relacionamentos"
-                                records={detail.relationships}
-                            />
-                            <DetailRecords
-                                title="Relacionado por"
-                                records={detail.related_from}
-                            />
-                            <DetailRecords
-                                title="Fontes dos dados"
-                                records={detail.sources}
-                            />
-                            <DetailRecords
-                                title="Disponibilidade no planner"
-                                records={detail.planner?.availability ?? []}
-                            />
-                            <DetailRecords
-                                title="Recomendações do planner"
+                            <RecommendationDetails
                                 records={detail.planner?.recommendations ?? []}
                             />
-                            {detail.completeness && (
-                                <DetailRecords
-                                    title="Qualidade dos dados"
-                                    records={[detail.completeness]}
-                                />
-                            )}
                         </div>
                     </>
                 )}
