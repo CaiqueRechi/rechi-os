@@ -1,26 +1,53 @@
 import { Head } from '@inertiajs/react';
+import { ShoppingBag } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { recordSalemAction } from '@/features/salem/api/salem-api';
+import {
+    recordSalemAction,
+    tradeSalemItem,
+} from '@/features/salem/api/salem-api';
 import { SalemGameCanvas } from '@/features/salem/components/SalemGameCanvas';
 import { SalemHud } from '@/features/salem/components/SalemHud';
+import { SalemMarketPanel } from '@/features/salem/components/SalemMarketPanel';
 import type { SalemSceneHandle } from '@/features/salem/game/scene/SalemScene';
 import { chooseAutonomousAction } from '@/features/salem/state/behavior-controller';
-import type { SalemAction, SalemSave, SalemWeather } from '@/types';
+import type {
+    SalemAction,
+    SalemMarketItem,
+    SalemSave,
+    SalemWeather,
+} from '@/types';
 
 type SalemPageProps = {
     initialSave: SalemSave;
+    market: SalemMarketItem[];
+    access: {
+        level: 'none' | 'read' | 'write';
+        canWrite: boolean;
+    };
 };
 
-export default function SalemPage({ initialSave }: SalemPageProps) {
+export default function SalemPage({
+    initialSave,
+    market,
+    access,
+}: SalemPageProps) {
     const sceneRef = useRef<SalemSceneHandle | null>(null);
     const [save, setSave] = useState(initialSave);
     const [action, setAction] = useState<SalemAction>('idle');
     const [weather, setWeather] = useState<SalemWeather>('sunset');
     const [error, setError] = useState<string | null>(null);
+    const [marketOpen, setMarketOpen] = useState(false);
+    const [marketItems, setMarketItems] = useState(market);
+    const [marketMessage, setMarketMessage] = useState<string | null>(null);
+    const [busyItemId, setBusyItemId] = useState<number | null>(null);
 
     const submitAction = useCallback(
-        async (nextAction: SalemAction | 'dev_cozy_points') => {
+        async (nextAction: SalemAction) => {
+            if (!access.canWrite) {
+                return;
+            }
+
             try {
                 const response = await recordSalemAction(nextAction);
                 setSave(response.save);
@@ -31,7 +58,40 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
                 );
             }
         },
-        [],
+        [access.canWrite],
+    );
+
+    const handleTrade = useCallback(
+        async (item: SalemMarketItem, tradeAction: 'buy' | 'sell') => {
+            if (!access.canWrite) {
+                return;
+            }
+
+            setBusyItemId(item.id);
+
+            try {
+                const response = await tradeSalemItem(item.id, tradeAction);
+                setSave(response.save);
+                setMarketItems((current) =>
+                    current.map((candidate) =>
+                        candidate.id === response.item.id
+                            ? response.item
+                            : candidate,
+                    ),
+                );
+                setMarketMessage(response.message);
+                setError(null);
+            } catch (tradeError) {
+                setMarketMessage(
+                    tradeError instanceof Error
+                        ? tradeError.message
+                        : 'Não foi possível concluir a negociação.',
+                );
+            } finally {
+                setBusyItemId(null);
+            }
+        },
+        [access.canWrite],
     );
 
     const requestAction = useCallback(
@@ -71,6 +131,25 @@ export default function SalemPage({ initialSave }: SalemPageProps) {
                     error={error}
                     save={save}
                     weather={weather}
+                />
+                <button
+                    type="button"
+                    onClick={() => setMarketOpen(true)}
+                    className="absolute top-4 right-4 z-20 flex items-center gap-2 rounded-xl border border-white/25 bg-[#172033]/65 px-4 py-3 text-sm font-bold text-white shadow-xl backdrop-blur-md transition hover:bg-[#172033]/80 sm:top-5 sm:right-5"
+                >
+                    <ShoppingBag className="size-4" /> Mercado
+                </button>
+                <SalemMarketPanel
+                    open={marketOpen}
+                    items={marketItems}
+                    balance={save.cozy_points}
+                    canWrite={access.canWrite}
+                    busyItemId={busyItemId}
+                    message={marketMessage}
+                    onClose={() => setMarketOpen(false)}
+                    onTrade={(item, tradeAction) =>
+                        void handleTrade(item, tradeAction)
+                    }
                 />
             </main>
         </>

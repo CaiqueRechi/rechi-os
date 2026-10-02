@@ -31,3 +31,20 @@ export type SalemActionResponse = {
     save: SalemSave;
     next_allowed_at: string | null;
 };
+
+export type SalemMarketItem = {
+    id: number;
+    key: string;
+    name: string;
+    description: string | null;
+    buy_price: number | null;
+    sell_price: number | null;
+    owned: number;
+    metadata: Record<string, unknown>;
+};
+
+export type SalemMarketResponse = {
+    save: SalemSave;
+    item: SalemMarketItem;
+    message: string;
+};

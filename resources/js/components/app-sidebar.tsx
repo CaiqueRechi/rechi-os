@@ -32,7 +32,7 @@ export function AppSidebar() {
             href: dashboard(),
             icon: LayoutGrid,
         },
-        ...(auth.user.is_admin
+        ...(auth.screen_access?.can_open_library
             ? [
                   {
                       title: 'Biblioteca',

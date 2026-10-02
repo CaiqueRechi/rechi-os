@@ -3,6 +3,7 @@
 namespace App\Services\Salem;
 
 use App\Models\SalemPlayer;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Str;
@@ -13,36 +14,43 @@ class SalemPlayerIdentityService
 
     public function resolvePlayer(Request $request): SalemPlayer
     {
-        $visitorKey = $this->validVisitorKey($request) ?? (string) Str::uuid();
+        $user = $request->user();
+
+        abort_unless($user instanceof User, 401);
+
+        $existingPlayer = $user->salemPlayer()->first();
+
+        if ($existingPlayer instanceof SalemPlayer) {
+            $existingPlayer->forceFill(['last_seen_at' => now()])->save();
+
+            return $existingPlayer;
+        }
+
         $now = now();
+        $legacyPlayer = $this->legacyPlayer($request);
 
-        Cookie::queue(Cookie::make(
-            self::VISITOR_COOKIE,
-            $visitorKey,
-            60 * 24 * 365 * 2,
-            null,
-            null,
-            $request->isSecure(),
-            true,
-            false,
-            'Lax',
-        ));
+        Cookie::queue(Cookie::forget(self::VISITOR_COOKIE));
 
-        $player = SalemPlayer::query()->firstOrCreate(
-            ['visitor_key' => $visitorKey],
+        if ($legacyPlayer instanceof SalemPlayer) {
+            $legacyPlayer->forceFill([
+                'user_id' => $user->id,
+                'last_seen_at' => $now,
+            ])->save();
+
+            return $legacyPlayer;
+        }
+
+        return SalemPlayer::query()->firstOrCreate(
+            ['user_id' => $user->id],
             [
-                'ip_hash' => $this->ipHash($request),
+                'visitor_key' => (string) Str::uuid(),
                 'first_seen_at' => $now,
                 'last_seen_at' => $now,
             ],
         );
-
-        $player->forceFill(['last_seen_at' => $now])->save();
-
-        return $player;
     }
 
-    protected function validVisitorKey(Request $request): ?string
+    protected function legacyPlayer(Request $request): ?SalemPlayer
     {
         $visitorKey = $request->cookies->get(self::VISITOR_COOKIE);
 
@@ -50,17 +58,9 @@ class SalemPlayerIdentityService
             return null;
         }
 
-        return $visitorKey;
-    }
-
-    protected function ipHash(Request $request): ?string
-    {
-        $ipAddress = $request->ip();
-
-        if (! is_string($ipAddress) || $ipAddress === '') {
-            return null;
-        }
-
-        return hash_hmac('sha256', $ipAddress, (string) config('app.key'));
+        return SalemPlayer::query()
+            ->whereNull('user_id')
+            ->where('visitor_key', $visitorKey)
+            ->first();
     }
 }
