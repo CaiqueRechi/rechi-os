@@ -2,7 +2,19 @@ import type { SalemWeather } from '@/types';
 
 import type { SalemStaticAssetKey } from '../game/assets/salem-asset-manifest';
 
-export type IslandBiome = 'home' | 'meadow' | 'rocky' | 'tropical' | 'autumn';
+export type IslandBiome =
+    | 'home'
+    | 'meadow'
+    | 'rocky'
+    | 'tropical'
+    | 'autumn'
+    | 'desert'
+    | 'tundra'
+    | 'mangrove'
+    | 'lavender'
+    | 'crystal'
+    | 'lunar'
+    | 'nebula';
 
 export type IslandProp =
     | 'cabin'
@@ -53,9 +65,9 @@ export const programmingSpot = {
 };
 
 export const salemHome = {
-    idle: [0, 0.7, 0.45] as [number, number, number],
-    sleep: [-1.3, 0.72, -1.05] as [number, number, number],
-    inspect: [-2.05, 0.73, 0.9] as [number, number, number],
+    idle: [0.65, 0.86, 1.34] as [number, number, number],
+    sleep: [-1.82, 0.86, 0.72] as [number, number, number],
+    inspect: [-2.36, 0.86, 1.22] as [number, number, number],
 };
 
 export const islandConfigs: IslandConfig[] = [
@@ -66,8 +78,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [0, 0, 0],
         radius: 3.6,
         height: 1.15,
-        color: '#6fb866',
-        soilColor: '#6e4f45',
+        color: '#73aa68',
+        soilColor: '#6b554a',
         props: [
             'cabin',
             'chair',
@@ -83,35 +95,35 @@ export const islandConfigs: IslandConfig[] = [
                 role: 'cabin',
                 position: [-0.95, 0.72, -0.88],
                 rotation: [0, -0.35, 0],
-                scale: 1.3,
+                scale: 0.88,
             },
             {
                 asset: 'prop.bench',
                 role: 'chair',
                 position: [1.92, 0.73, 1.2],
                 rotation: [0, -0.72, 0],
-                scale: 0.82,
+                scale: 0.7,
             },
             {
                 asset: 'nature.treeOakA',
                 role: 'trees',
                 position: [-2.15, 0.72, -0.1],
                 rotation: [0, 0.28, 0],
-                scale: 0.22,
+                scale: 0.18,
             },
             {
                 asset: 'nature.treeRound',
                 role: 'trees',
                 position: [1.28, 0.72, -1.58],
                 rotation: [0, -0.46, 0],
-                scale: 0.2,
+                scale: 0.17,
             },
             {
                 asset: 'nature.pineA',
                 role: 'trees',
                 position: [-1.76, 0.72, 1.34],
                 rotation: [0, 0.74, 0],
-                scale: 0.2,
+                scale: 0.17,
             },
             {
                 asset: 'nature.bushFlowers',
@@ -179,8 +191,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [-4.8, -0.5, -2.55],
         radius: 1.75,
         height: 0.8,
-        color: '#78c96e',
-        soilColor: '#795b45',
+        color: '#83b36b',
+        soilColor: '#705e50',
         props: ['trees', 'flowers'],
         assetPlacements: [
             {
@@ -221,8 +233,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [4.65, -0.85, -3.25],
         radius: 2.05,
         height: 1.25,
-        color: '#7d8b86',
-        soilColor: '#54535d',
+        color: '#838b7c',
+        soilColor: '#606066',
         props: ['rocks', 'lantern'],
         assetPlacements: [
             {
@@ -263,8 +275,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [3.55, -1.05, 2.45],
         radius: 1.95,
         height: 0.9,
-        color: '#43ad83',
-        soilColor: '#545845',
+        color: '#519a76',
+        soilColor: '#536458',
         props: ['trees', 'pool', 'rocks'],
         assetPlacements: [
             {
@@ -313,8 +325,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [-3.55, -1.15, 2.75],
         radius: 1.65,
         height: 0.95,
-        color: '#b56c47',
-        soilColor: '#654338',
+        color: '#b87850',
+        soilColor: '#6b5047',
         props: ['trees', 'stumps', 'rocks'],
         assetPlacements: [
             {
@@ -347,5 +359,237 @@ export const islandConfigs: IslandConfig[] = [
             },
         ],
         weatherHint: 'sunset',
+    },
+    {
+        id: 'desert',
+        name: 'Dune glass isle',
+        biome: 'desert',
+        position: [-6.25, -0.95, 0.65],
+        radius: 1.42,
+        height: 0.72,
+        color: '#c29a62',
+        soilColor: '#715748',
+        props: ['rocks', 'stumps'],
+        assetPlacements: [
+            {
+                asset: 'nature.rockC',
+                role: 'rocks',
+                position: [-0.55, 0.48, -0.25],
+                rotation: [0, 0.8, 0],
+                scale: 0.32,
+            },
+            {
+                asset: 'nature.rockA',
+                role: 'rocks',
+                position: [0.62, 0.48, 0.42],
+                rotation: [0, -0.3, 0],
+                scale: 0.24,
+            },
+            {
+                asset: 'prop.barrel',
+                role: 'stumps',
+                position: [0.08, 0.48, -0.66],
+                rotation: [0, 0.2, 0],
+                scale: 0.44,
+            },
+        ],
+        weatherHint: 'sunset',
+    },
+    {
+        id: 'tundra',
+        name: 'Frost lichen isle',
+        biome: 'tundra',
+        position: [6.9, -1.25, 0.1],
+        radius: 1.55,
+        height: 0.8,
+        color: '#a9beb5',
+        soilColor: '#626d72',
+        props: ['trees', 'rocks', 'lantern'],
+        assetPlacements: [
+            {
+                asset: 'nature.pineB',
+                role: 'trees',
+                position: [-0.52, 0.55, -0.2],
+                rotation: [0, 0.35, 0],
+                scale: 0.2,
+            },
+            {
+                asset: 'nature.rockB',
+                role: 'rocks',
+                position: [0.55, 0.55, 0.38],
+                rotation: [0, 1, 0],
+                scale: 0.3,
+            },
+            {
+                asset: 'nature.grassWispy',
+                role: 'decor',
+                position: [0.2, 0.55, -0.72],
+                rotation: [0, -0.4, 0],
+                scale: 0.26,
+            },
+        ],
+        weatherHint: 'misty',
+    },
+    {
+        id: 'mangrove',
+        name: 'Mangrove tide isle',
+        biome: 'mangrove',
+        position: [1.25, -1.85, 4.9],
+        radius: 1.72,
+        height: 0.86,
+        color: '#4f896f',
+        soilColor: '#536258',
+        props: ['trees', 'pool', 'rocks'],
+        assetPlacements: [
+            {
+                asset: 'nature.twistedTree',
+                role: 'trees',
+                position: [-0.62, 0.58, -0.35],
+                rotation: [0, -0.55, 0],
+                scale: 0.17,
+            },
+            {
+                asset: 'nature.fern',
+                role: 'decor',
+                position: [0.52, 0.58, -0.18],
+                rotation: [0, 0.9, 0],
+                scale: 0.26,
+            },
+            {
+                asset: 'nature.tallGrass',
+                role: 'decor',
+                position: [0.1, 0.58, 0.72],
+                rotation: [0, -0.1, 0],
+                scale: 0.3,
+            },
+        ],
+        waterfalls: [{ offset: [-1.1, -0.08, 0.45], height: 3.9 }],
+        weatherHint: 'rain',
+    },
+    {
+        id: 'lavender',
+        name: 'Lavender steppe isle',
+        biome: 'lavender',
+        position: [-1.1, -1.7, -5.45],
+        radius: 1.5,
+        height: 0.78,
+        color: '#929f78',
+        soilColor: '#6b5e6d',
+        props: ['flowers', 'trees'],
+        assetPlacements: [
+            {
+                asset: 'nature.flowerGroup',
+                role: 'flowers',
+                position: [-0.45, 0.52, -0.25],
+                rotation: [0, 0.3, 0],
+                scale: 0.28,
+            },
+            {
+                asset: 'nature.bushFlowers',
+                role: 'flowers',
+                position: [0.58, 0.52, 0.38],
+                rotation: [0, -0.8, 0],
+                scale: 0.25,
+            },
+            {
+                asset: 'nature.treeRound',
+                role: 'trees',
+                position: [0.05, 0.52, -0.68],
+                rotation: [0, 0.6, 0],
+                scale: 0.17,
+            },
+        ],
+        weatherHint: 'clear',
+    },
+    {
+        id: 'crystal',
+        name: 'Prism root isle',
+        biome: 'crystal',
+        position: [5.35, -2.2, 4.9],
+        radius: 1.25,
+        height: 0.68,
+        color: '#70a79f',
+        soilColor: '#526773',
+        props: ['rocks', 'flowers'],
+        assetPlacements: [
+            {
+                asset: 'nature.rockA',
+                role: 'rocks',
+                position: [-0.32, 0.45, 0.35],
+                rotation: [0, 0.45, 0],
+                scale: 0.26,
+            },
+            {
+                asset: 'nature.grass',
+                role: 'flowers',
+                position: [0.45, 0.45, -0.22],
+                rotation: [0, -0.65, 0],
+                scale: 0.24,
+            },
+        ],
+        weatherHint: 'night',
+    },
+    {
+        id: 'lunar',
+        name: 'Lunar basalt isle',
+        biome: 'lunar',
+        position: [8.2, -2.65, -3.95],
+        radius: 1.36,
+        height: 0.95,
+        color: '#757a84',
+        soilColor: '#51535f',
+        props: ['rocks', 'lantern'],
+        assetPlacements: [
+            {
+                asset: 'nature.rockB',
+                role: 'rocks',
+                position: [-0.5, 0.62, -0.25],
+                rotation: [0, 0.35, 0],
+                scale: 0.34,
+            },
+            {
+                asset: 'nature.rockC',
+                role: 'rocks',
+                position: [0.52, 0.62, 0.5],
+                rotation: [0, 0.95, 0],
+                scale: 0.28,
+            },
+        ],
+        weatherHint: 'night',
+    },
+    {
+        id: 'nebula',
+        name: 'Nebula orchard isle',
+        biome: 'nebula',
+        position: [-7.8, -2.35, -4.2],
+        radius: 1.28,
+        height: 0.72,
+        color: '#7276aa',
+        soilColor: '#514f6a',
+        props: ['trees', 'flowers', 'lantern'],
+        assetPlacements: [
+            {
+                asset: 'nature.treeRound',
+                role: 'trees',
+                position: [-0.4, 0.48, -0.25],
+                rotation: [0, 0.8, 0],
+                scale: 0.16,
+            },
+            {
+                asset: 'nature.bushFlowers',
+                role: 'flowers',
+                position: [0.42, 0.48, 0.22],
+                rotation: [0, -0.25, 0],
+                scale: 0.2,
+            },
+            {
+                asset: 'nature.grassWispy',
+                role: 'decor',
+                position: [0.15, 0.48, -0.7],
+                rotation: [0, 0.2, 0],
+                scale: 0.24,
+            },
+        ],
+        weatherHint: 'night',
     },
 ];
