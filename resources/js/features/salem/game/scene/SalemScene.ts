@@ -25,6 +25,7 @@ type Waterfall = {
     droplets: THREE.InstancedMesh;
     speed: number;
     height: number;
+    topY: number;
 };
 
 type InteractionTarget = {
@@ -232,7 +233,7 @@ export class SalemScene implements SalemSceneHandle {
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.06;
+        this.renderer.toneMappingExposure = 1.08;
         this.renderer.domElement.className = 'block size-full';
         this.renderer.domElement.style.cursor = 'grab';
         this.container.appendChild(this.renderer.domElement);
@@ -245,7 +246,7 @@ export class SalemScene implements SalemSceneHandle {
         this.scene.add(this.atmosphere);
         this.scene.add(this.root);
 
-        this.hemisphere = new THREE.HemisphereLight('#eefcff', '#83745f', 1.05);
+        this.hemisphere = new THREE.HemisphereLight('#eefcff', '#83745f', 1.18);
         this.scene.add(this.hemisphere);
 
         this.sunlight = new THREE.DirectionalLight('#fff2c8', 2.7);
@@ -256,9 +257,11 @@ export class SalemScene implements SalemSceneHandle {
         this.sunlight.shadow.camera.right = 7;
         this.sunlight.shadow.camera.top = 6;
         this.sunlight.shadow.camera.bottom = -6;
+        this.sunlight.shadow.bias = -0.0004;
+        this.sunlight.shadow.normalBias = 0.025;
         this.scene.add(this.sunlight);
 
-        const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.3);
+        const fillLight = new THREE.DirectionalLight('#a9e8ff', 0.4);
         fillLight.position.set(6, 3, -5);
         this.scene.add(fillLight);
 
@@ -299,7 +302,7 @@ export class SalemScene implements SalemSceneHandle {
                 0.3,
                 28,
                 islandSeed,
-                0.075,
+                0.105,
             ),
             new THREE.MeshStandardMaterial({
                 color: island.color,
@@ -325,7 +328,7 @@ export class SalemScene implements SalemSceneHandle {
                 0.12,
                 28,
                 islandSeed,
-                0.09,
+                0.115,
             ),
             new THREE.MeshStandardMaterial({
                 color: '#325f48',
@@ -390,7 +393,7 @@ export class SalemScene implements SalemSceneHandle {
                 island.height * 0.72,
                 24,
                 islandSeed + 17,
-                0.12,
+                0.14,
             ),
             rockMaterial,
         );
@@ -407,7 +410,7 @@ export class SalemScene implements SalemSceneHandle {
                 island.height * 0.46,
                 20,
                 islandSeed + 41,
-                0.17,
+                0.2,
             ),
             darkRockMaterial,
         );
@@ -422,7 +425,7 @@ export class SalemScene implements SalemSceneHandle {
             new THREE.MeshBasicMaterial({
                 color: '#9de7ff',
                 transparent: true,
-                opacity: island.id === 'home' ? 0.28 : 0.18,
+                opacity: island.id === 'home' ? 0.12 : 0.08,
             }),
         );
         glowRing.position.y = -island.height * 0.82;
@@ -430,7 +433,7 @@ export class SalemScene implements SalemSceneHandle {
         glowRing.scale.set(scale.x * 0.8, scale.z * 0.8, 1);
         group.add(glowRing);
 
-        const shardCount = island.id === 'home' ? 8 : 5;
+        const shardCount = island.id === 'home' ? 5 : 3;
 
         for (let index = 0; index < shardCount; index += 1) {
             const angle = index * 1.71;
@@ -460,12 +463,18 @@ export class SalemScene implements SalemSceneHandle {
         island: IslandConfig,
         islandScale: THREE.Vector3 | null,
     ): void {
+        const islandSeed = this.seedFromString(island.id);
         const highlight = new THREE.Mesh(
-            new THREE.CircleGeometry(island.radius * 0.72, 24),
+            this.createIrregularDiscGeometry(
+                island.radius * 0.72,
+                24,
+                islandSeed + 73,
+                0.11,
+            ),
             new THREE.MeshBasicMaterial({
                 color: this.highlightColorForBiome(island.biome),
                 transparent: true,
-                opacity: island.id === 'home' ? 0.22 : 0.16,
+                opacity: island.id === 'home' ? 0.14 : 0.1,
             }),
         );
         highlight.rotation.x = -Math.PI * 0.5;
@@ -474,11 +483,16 @@ export class SalemScene implements SalemSceneHandle {
         group.add(highlight);
 
         const path = new THREE.Mesh(
-            new THREE.CircleGeometry(island.radius * 0.36, 18),
+            this.createIrregularDiscGeometry(
+                island.radius * 0.36,
+                18,
+                islandSeed + 109,
+                0.14,
+            ),
             new THREE.MeshBasicMaterial({
                 color: this.pathColorForBiome(island.biome),
                 transparent: true,
-                opacity: island.id === 'home' ? 0.26 : 0.12,
+                opacity: island.id === 'home' ? 0.2 : 0.08,
             }),
         );
         path.rotation.x = -Math.PI * 0.5;
@@ -548,15 +562,17 @@ export class SalemScene implements SalemSceneHandle {
         islandScale: THREE.Vector3,
     ): THREE.InstancedMesh {
         const count =
-            island.id === 'home' ? 48 : Math.round(12 + island.radius * 10);
+            island.id === 'home' ? 36 : Math.round(9 + island.radius * 7);
         const colors = this.scatterColorsForBiome(island.biome);
         const grass = new THREE.InstancedMesh(
-            new THREE.ConeGeometry(0.025, 0.28, 3),
+            new THREE.ConeGeometry(0.035, 0.18, 4),
             new THREE.MeshStandardMaterial({
                 color: colors.grass,
-                roughness: 0.74,
+                roughness: 0.7,
                 flatShading: true,
                 vertexColors: true,
+                emissive: '#173c26',
+                emissiveIntensity: 0.1,
             }),
             count,
         );
@@ -570,7 +586,7 @@ export class SalemScene implements SalemSceneHandle {
             position.copy(
                 this.scatterPointOnIsland(island, islandScale, index, 31.7),
             );
-            position.y += 0.08;
+            position.y += 0.055;
             rotation.set(
                 this.randomSigned(index, 3.7) * 0.18,
                 this.random(index, 8.9) * Math.PI * 2,
@@ -670,7 +686,7 @@ export class SalemScene implements SalemSceneHandle {
             count,
         );
         const canopies = new THREE.InstancedMesh(
-            new THREE.ConeGeometry(0.18, 0.46, 6),
+            new THREE.DodecahedronGeometry(0.2, 1),
             new THREE.MeshStandardMaterial({
                 color: colors.tree,
                 roughness: 0.72,
@@ -701,8 +717,12 @@ export class SalemScene implements SalemSceneHandle {
             matrix.compose(position, quaternion, size);
             trunks.setMatrixAt(index, matrix);
 
-            position.y += 0.33 * treeSize;
-            size.setScalar(treeSize * (0.94 + this.random(index, 18.9) * 0.12));
+            position.y += 0.31 * treeSize;
+            size.set(
+                treeSize * (0.9 + this.random(index, 18.9) * 0.12),
+                treeSize * (1.12 + this.random(index, 24.3) * 0.12),
+                treeSize * (0.9 + this.random(index, 36.1) * 0.12),
+            );
             matrix.compose(position, quaternion, size);
             canopies.setMatrixAt(index, matrix);
             canopies.setColorAt(
@@ -1003,6 +1023,35 @@ export class SalemScene implements SalemSceneHandle {
                 y + verticalOffset,
                 z * radialScale,
             );
+        }
+
+        positions.needsUpdate = true;
+        geometry.computeVertexNormals();
+
+        return geometry;
+    }
+
+    private createIrregularDiscGeometry(
+        radius: number,
+        segments: number,
+        seed: number,
+        strength: number,
+    ): THREE.CircleGeometry {
+        const geometry = new THREE.CircleGeometry(radius, segments);
+        const positions = geometry.getAttribute('position');
+
+        for (let index = 0; index < positions.count; index += 1) {
+            const x = positions.getX(index);
+            const y = positions.getY(index);
+
+            if (Math.hypot(x, y) < 0.0001) {
+                continue;
+            }
+
+            const angle = Math.atan2(y, x);
+            const radialScale =
+                1 + this.radialShapeNoise(angle, seed) * strength;
+            positions.setXY(index, x * radialScale, y * radialScale);
         }
 
         positions.needsUpdate = true;
@@ -1638,26 +1687,28 @@ export class SalemScene implements SalemSceneHandle {
             tree.add(trunk);
 
             const leaves = new THREE.Mesh(
-                new THREE.ConeGeometry(0.48, 1.0, 7),
+                new THREE.DodecahedronGeometry(0.43, 1),
                 new THREE.MeshStandardMaterial({
                     color: leafColors[biome][index % 2],
-                    roughness: 0.85,
+                    roughness: 0.8,
                     flatShading: true,
                 }),
             );
-            leaves.position.y = 1.18;
+            leaves.position.y = 1.2;
+            leaves.scale.set(0.82, 1.08, 0.86);
             leaves.castShadow = true;
             tree.add(leaves);
 
             const lowerLeaves = new THREE.Mesh(
-                new THREE.ConeGeometry(0.58, 0.82, 7),
+                new THREE.DodecahedronGeometry(0.48, 1),
                 new THREE.MeshStandardMaterial({
                     color: leafColors[biome][(index + 1) % 2],
-                    roughness: 0.86,
+                    roughness: 0.82,
                     flatShading: true,
                 }),
             );
-            lowerLeaves.position.y = 0.86;
+            lowerLeaves.position.set(0.08, 0.92, 0.02);
+            lowerLeaves.scale.set(1.08, 0.78, 1);
             lowerLeaves.castShadow = true;
             tree.add(lowerLeaves);
             group.add(tree);
@@ -1801,15 +1852,33 @@ export class SalemScene implements SalemSceneHandle {
         const streamMaterial = new THREE.MeshStandardMaterial({
             color: '#77d9f2',
             transparent: true,
-            opacity: 0.72,
-            roughness: 0.1,
+            opacity: 0.56,
+            roughness: 0.28,
             emissive: '#2ea7c8',
-            emissiveIntensity: 0.18,
+            emissiveIntensity: 0.08,
+            depthWrite: false,
+            side: THREE.DoubleSide,
         });
-        const stream = new THREE.Mesh(
-            new THREE.BoxGeometry(0.28, height, 0.08),
-            streamMaterial,
-        );
+        const streamGeometry = new THREE.PlaneGeometry(0.34, height, 3, 12);
+        const positions = streamGeometry.getAttribute('position');
+
+        for (let index = 0; index < positions.count; index += 1) {
+            const x = positions.getX(index);
+            const y = positions.getY(index);
+            const progress = THREE.MathUtils.clamp(y / height + 0.5, 0, 1);
+            const taper = 0.74 + progress * 0.26;
+            const wave = Math.sin(progress * Math.PI * 4.2) * 0.018;
+            positions.setXYZ(
+                index,
+                x * taper + wave,
+                y,
+                Math.sin(progress * Math.PI * 3.1) * 0.022,
+            );
+        }
+
+        positions.needsUpdate = true;
+        streamGeometry.computeVertexNormals();
+        const stream = new THREE.Mesh(streamGeometry, streamMaterial);
         stream.position.set(offset[0], offset[1] - height * 0.5, offset[2]);
 
         const dropletGeometry = new THREE.SphereGeometry(0.035, 6, 4);
@@ -1821,20 +1890,20 @@ export class SalemScene implements SalemSceneHandle {
         const droplets = new THREE.InstancedMesh(
             dropletGeometry,
             dropletMaterial,
-            16,
+            12,
         );
         const matrix = new THREE.Matrix4();
 
-        for (let index = 0; index < 16; index += 1) {
+        for (let index = 0; index < 12; index += 1) {
             matrix.makeTranslation(
-                offset[0] + ((index % 4) - 1.5) * 0.06,
-                offset[1] - (index / 16) * height,
+                offset[0] + ((index % 3) - 1) * 0.055,
+                offset[1] - (index / 12) * height,
                 offset[2] + ((index % 3) - 1) * 0.035,
             );
             droplets.setMatrixAt(index, matrix);
         }
 
-        return { stream, droplets, speed: 1.7, height };
+        return { stream, droplets, speed: 1.7, height, topY: offset[1] };
     }
 
     private createDecorativeFragments(): void {
@@ -1844,9 +1913,9 @@ export class SalemScene implements SalemSceneHandle {
             flatShading: true,
         });
 
-        for (let index = 0; index < 12; index += 1) {
+        for (let index = 0; index < 6; index += 1) {
             const fragment = new THREE.Mesh(
-                new THREE.DodecahedronGeometry(0.08 + (index % 4) * 0.04, 0),
+                new THREE.DodecahedronGeometry(0.06 + (index % 3) * 0.035, 0),
                 fragmentMaterial,
             );
             fragment.position.set(
@@ -2286,10 +2355,10 @@ export class SalemScene implements SalemSceneHandle {
                 const position = new THREE.Vector3().setFromMatrixPosition(
                     matrix,
                 );
-                const nextY = -(
-                    (elapsed * waterfall.speed + index * 0.31) %
-                    waterfall.height
-                );
+                const nextY =
+                    waterfall.topY -
+                    ((elapsed * waterfall.speed + index * 0.31) %
+                        waterfall.height);
                 matrix.makeTranslation(position.x, nextY, position.z);
                 waterfall.droplets.setMatrixAt(index, matrix);
             }

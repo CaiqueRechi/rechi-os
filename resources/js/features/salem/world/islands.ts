@@ -334,14 +334,14 @@ export const islandConfigs: IslandConfig[] = [
                 role: 'trees',
                 position: [-0.85, 0.66, -0.22],
                 rotation: [0, 0.4, 0],
-                scale: 0.2,
+                scale: 0.17,
             },
             {
                 asset: 'nature.pineA',
                 role: 'trees',
                 position: [0.62, 0.66, 0.58],
                 rotation: [0, -0.7, 0],
-                scale: 0.19,
+                scale: 0.17,
             },
             {
                 asset: 'prop.barrel',
