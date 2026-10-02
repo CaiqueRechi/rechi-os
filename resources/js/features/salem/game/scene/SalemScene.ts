@@ -187,7 +187,7 @@ export class SalemScene implements SalemSceneHandle {
         this.scene.add(this.atmosphere);
         this.scene.add(this.root);
 
-        this.hemisphere = new THREE.HemisphereLight('#eefcff', '#83745f', 2.15);
+        this.hemisphere = new THREE.HemisphereLight('#eefcff', '#83745f', 1.05);
         this.scene.add(this.hemisphere);
 
         this.sunlight = new THREE.DirectionalLight('#fff2c8', 2.7);
@@ -200,7 +200,7 @@ export class SalemScene implements SalemSceneHandle {
         this.sunlight.shadow.camera.bottom = -8;
         this.scene.add(this.sunlight);
 
-        const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.82);
+        const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.3);
         fillLight.position.set(6, 3, -5);
         this.scene.add(fillLight);
 
@@ -224,18 +224,22 @@ export class SalemScene implements SalemSceneHandle {
 
         const islandScale =
             island.id === 'home' ? new THREE.Vector3(1.16, 1, 0.82) : null;
+        const islandSeed = this.seedFromString(island.id);
 
         const grass = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius,
                 island.radius * 0.94,
                 0.3,
-                24,
+                28,
+                islandSeed,
+                0.075,
             ),
             new THREE.MeshStandardMaterial({
                 color: island.color,
-                roughness: 0.86,
-                flatShading: true,
+                roughness: 0.82,
+                metalness: 0,
+                flatShading: false,
             }),
         );
         grass.position.y = island.height * 0.5;
@@ -245,16 +249,19 @@ export class SalemScene implements SalemSceneHandle {
         group.add(grass);
 
         const rim = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius * 1.01,
                 island.radius * 0.98,
                 0.12,
-                24,
+                28,
+                islandSeed,
+                0.09,
             ),
             new THREE.MeshStandardMaterial({
                 color: '#325f48',
-                roughness: 0.82,
-                flatShading: true,
+                roughness: 0.78,
+                metalness: 0,
+                flatShading: false,
             }),
         );
         rim.position.y = island.height * 0.34;
@@ -290,21 +297,26 @@ export class SalemScene implements SalemSceneHandle {
         const scale = islandScale ?? new THREE.Vector3(1, 1, 1);
         const rockMaterial = new THREE.MeshStandardMaterial({
             color: island.soilColor,
-            roughness: 0.96,
-            flatShading: true,
+            roughness: 0.82,
+            metalness: 0,
+            flatShading: false,
         });
         const darkRockMaterial = new THREE.MeshStandardMaterial({
             color: '#3f3d46',
-            roughness: 0.98,
-            flatShading: true,
+            roughness: 0.85,
+            metalness: 0,
+            flatShading: false,
         });
+        const islandSeed = this.seedFromString(island.id);
 
         const upperRock = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius * 0.94,
                 island.radius * 0.76,
                 island.height * 0.72,
-                20,
+                24,
+                islandSeed + 17,
+                0.12,
             ),
             rockMaterial,
         );
@@ -315,11 +327,13 @@ export class SalemScene implements SalemSceneHandle {
         group.add(upperRock);
 
         const lowerRock = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius * 0.58,
                 island.radius * 0.4,
                 island.height * 0.46,
-                16,
+                20,
+                islandSeed + 41,
+                0.17,
             ),
             darkRockMaterial,
         );
@@ -399,6 +413,536 @@ export class SalemScene implements SalemSceneHandle {
         );
         path.position.set(0.75, island.height * 0.5 + 0.158, 0.88);
         group.add(path);
+    }
+
+    private highlightColorForBiome(biome: IslandBiome): string {
+        const colors: Record<IslandBiome, string> = {
+            autumn: '#f2a45d',
+            crystal: '#a5fff1',
+            desert: '#f0bd61',
+            home: '#a7df72',
+            lavender: '#c9a2ff',
+            lunar: '#cdd2e8',
+            mangrove: '#69c690',
+            meadow: '#a7df72',
+            nebula: '#ff9df3',
+            rocky: '#bec5b8',
+            tropical: '#70e0ad',
+            tundra: '#dcf8ff',
+        };
+
+        return colors[biome];
+    }
+
+    private pathColorForBiome(biome: IslandBiome): string {
+        const colors: Record<IslandBiome, string> = {
+            autumn: '#d68b4e',
+            crystal: '#d4f8ff',
+            desert: '#e5b45f',
+            home: '#e2bf8f',
+            lavender: '#ddc1ff',
+            lunar: '#a5aab8',
+            mangrove: '#5a8566',
+            meadow: '#e2bf8f',
+            nebula: '#9a88ff',
+            rocky: '#a5aea8',
+            tropical: '#76c9b0',
+            tundra: '#e3f4ef',
+        };
+
+        return colors[biome];
+    }
+
+    private addGroundScatter(
+        group: THREE.Group,
+        island: IslandConfig,
+        islandScale: THREE.Vector3 | null,
+    ): void {
+        const scale = islandScale ?? new THREE.Vector3(1, 1, 1);
+        group.add(this.createGrassScatter(island, scale));
+        group.add(this.createPebbleScatter(island, scale));
+
+        if (island.props.includes('trees')) {
+            group.add(this.createSaplingScatter(island, scale));
+        }
+    }
+
+    private createGrassScatter(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+    ): THREE.InstancedMesh {
+        const count =
+            island.id === 'home' ? 48 : Math.round(12 + island.radius * 10);
+        const colors = this.scatterColorsForBiome(island.biome);
+        const grass = new THREE.InstancedMesh(
+            new THREE.ConeGeometry(0.025, 0.28, 3),
+            new THREE.MeshStandardMaterial({
+                color: colors.grass,
+                roughness: 0.74,
+                flatShading: true,
+                vertexColors: true,
+            }),
+            count,
+        );
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const size = new THREE.Vector3();
+
+        for (let index = 0; index < count; index += 1) {
+            position.copy(
+                this.scatterPointOnIsland(island, islandScale, index, 31.7),
+            );
+            position.y += 0.08;
+            rotation.set(
+                this.randomSigned(index, 3.7) * 0.18,
+                this.random(index, 8.9) * Math.PI * 2,
+                this.randomSigned(index, 11.2) * 0.14,
+            );
+            quaternion.setFromEuler(rotation);
+            const height = 0.92 + this.random(index, 18.4) * 0.16;
+            size.set(
+                0.92 + this.random(index, 41.2) * 0.16,
+                height,
+                0.92 + this.random(index, 51.2) * 0.16,
+            );
+            matrix.compose(position, quaternion, size);
+            grass.setMatrixAt(index, matrix);
+            grass.setColorAt(
+                index,
+                this.variedColor(colors.grass, colors.grassAccent, index, 4.8),
+            );
+        }
+
+        grass.receiveShadow = true;
+
+        return grass;
+    }
+
+    private createPebbleScatter(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+    ): THREE.InstancedMesh {
+        const count =
+            island.id === 'home' ? 20 : Math.round(6 + island.radius * 5);
+        const colors = this.scatterColorsForBiome(island.biome);
+        const pebbles = new THREE.InstancedMesh(
+            new THREE.DodecahedronGeometry(0.065, 0),
+            new THREE.MeshStandardMaterial({
+                color: colors.stone,
+                roughness: 0.8,
+                flatShading: true,
+                vertexColors: true,
+            }),
+            count,
+        );
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const size = new THREE.Vector3();
+
+        for (let index = 0; index < count; index += 1) {
+            position.copy(
+                this.scatterPointOnIsland(island, islandScale, index, 73.1),
+            );
+            position.y += 0.015;
+            rotation.set(
+                this.random(index, 2.1) * Math.PI,
+                this.random(index, 5.2) * Math.PI,
+                this.random(index, 7.6) * Math.PI,
+            );
+            quaternion.setFromEuler(rotation);
+            const pebbleSize = 0.45 + this.random(index, 13.8) * 0.82;
+            size.set(
+                pebbleSize * (0.8 + this.random(index, 22.1) * 0.75),
+                pebbleSize * (0.28 + this.random(index, 28.6) * 0.28),
+                pebbleSize * (0.78 + this.random(index, 35.4) * 0.55),
+            );
+            matrix.compose(position, quaternion, size);
+            pebbles.setMatrixAt(index, matrix);
+            pebbles.setColorAt(
+                index,
+                this.variedColor(colors.stone, colors.stoneAccent, index, 1.8),
+            );
+        }
+
+        pebbles.castShadow = true;
+        pebbles.receiveShadow = true;
+
+        return pebbles;
+    }
+
+    private createSaplingScatter(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+    ): THREE.Group {
+        const group = new THREE.Group();
+        const count =
+            island.id === 'home'
+                ? 6
+                : Math.max(2, Math.round(island.radius * 1.6));
+        const colors = this.scatterColorsForBiome(island.biome);
+        const trunks = new THREE.InstancedMesh(
+            new THREE.CylinderGeometry(0.025, 0.04, 0.42, 5),
+            new THREE.MeshStandardMaterial({
+                color: '#6b4935',
+                roughness: 0.65,
+                flatShading: true,
+            }),
+            count,
+        );
+        const canopies = new THREE.InstancedMesh(
+            new THREE.ConeGeometry(0.18, 0.46, 6),
+            new THREE.MeshStandardMaterial({
+                color: colors.tree,
+                roughness: 0.72,
+                flatShading: true,
+                vertexColors: true,
+            }),
+            count,
+        );
+        const matrix = new THREE.Matrix4();
+        const position = new THREE.Vector3();
+        const rotation = new THREE.Euler();
+        const quaternion = new THREE.Quaternion();
+        const size = new THREE.Vector3();
+
+        for (let index = 0; index < count; index += 1) {
+            position.copy(
+                this.scatterPointOnIsland(island, islandScale, index, 129.3),
+            );
+            rotation.set(0, this.random(index, 9.4) * Math.PI * 2, 0);
+            quaternion.setFromEuler(rotation);
+            const treeSize =
+                island.id === 'home'
+                    ? 0.92 + this.random(index, 44.5) * 0.16
+                    : 0.84 + this.random(index, 44.5) * 0.16;
+
+            position.y += 0.2 * treeSize;
+            size.setScalar(treeSize);
+            matrix.compose(position, quaternion, size);
+            trunks.setMatrixAt(index, matrix);
+
+            position.y += 0.33 * treeSize;
+            size.setScalar(treeSize * (0.94 + this.random(index, 18.9) * 0.12));
+            matrix.compose(position, quaternion, size);
+            canopies.setMatrixAt(index, matrix);
+            canopies.setColorAt(
+                index,
+                this.variedColor(colors.tree, colors.treeAccent, index, 7.1),
+            );
+        }
+
+        trunks.castShadow = true;
+        canopies.castShadow = true;
+        group.add(trunks);
+        group.add(canopies);
+
+        return group;
+    }
+
+    private scatterPointOnIsland(
+        island: IslandConfig,
+        islandScale: THREE.Vector3,
+        index: number,
+        seed: number,
+    ): THREE.Vector3 {
+        const islandSeed = (this.seedFromString(island.id) % 10000) / 101;
+        const clusterCount = island.id === 'home' ? 5 : 3;
+        let point = new THREE.Vector3();
+
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+            const cursor = index + attempt * 23;
+            const cluster = Math.floor(
+                this.random(cursor, seed + islandSeed) * clusterCount,
+            );
+            const centerAngle =
+                (cluster / clusterCount) * Math.PI * 2 +
+                this.random(cluster, seed + islandSeed + 4.7) * 1.15;
+            const centerDistance =
+                island.radius *
+                (0.22 + this.random(cluster, seed + islandSeed + 11.3) * 0.42);
+            const spread =
+                island.radius *
+                (0.06 + this.random(cluster, seed + islandSeed + 18.1) * 0.12);
+            const jitterAngle =
+                this.random(cursor, seed + islandSeed + 27.9) * Math.PI * 2;
+            const jitterDistance =
+                spread *
+                Math.sqrt(this.random(cursor, seed + islandSeed + 35.6));
+            let x =
+                Math.cos(centerAngle) * centerDistance +
+                Math.cos(jitterAngle) * jitterDistance;
+            let z =
+                Math.sin(centerAngle) * centerDistance +
+                Math.sin(jitterAngle) * jitterDistance;
+            const distance = Math.hypot(x, z);
+            const maximumDistance = island.radius * 0.82;
+
+            if (distance > maximumDistance) {
+                const clamp = maximumDistance / distance;
+                x *= clamp;
+                z *= clamp;
+            }
+
+            point = new THREE.Vector3(
+                x * islandScale.x,
+                island.height * 0.5 + 0.17,
+                z * islandScale.z,
+            );
+
+            if (!this.isProtectedScatterPoint(island, point)) {
+                return point;
+            }
+        }
+
+        return point;
+    }
+
+    private isProtectedScatterPoint(
+        island: IslandConfig,
+        point: THREE.Vector3,
+    ): boolean {
+        if (island.id !== 'home') {
+            return false;
+        }
+
+        const protectedZones = [
+            { x: -0.95, z: -0.88, radius: 1.05 },
+            { x: 1.92, z: 1.2, radius: 0.78 },
+            {
+                x: programmingSpot.laptop[0],
+                z: programmingSpot.laptop[2],
+                radius: 0.72,
+            },
+            { x: salemHome.idle[0], z: salemHome.idle[2], radius: 0.48 },
+        ];
+
+        return protectedZones.some((zone) => {
+            const x = point.x - zone.x;
+            const z = point.z - zone.z;
+
+            return Math.hypot(x, z) < zone.radius;
+        });
+    }
+
+    private scatterColorsForBiome(biome: IslandBiome): {
+        grass: string;
+        grassAccent: string;
+        stone: string;
+        stoneAccent: string;
+        tree: string;
+        treeAccent: string;
+    } {
+        const colors: Record<
+            IslandBiome,
+            {
+                grass: string;
+                grassAccent: string;
+                stone: string;
+                stoneAccent: string;
+                tree: string;
+                treeAccent: string;
+            }
+        > = {
+            autumn: {
+                grass: '#c58a45',
+                grassAccent: '#d6a65d',
+                stone: '#73695e',
+                stoneAccent: '#9a8b73',
+                tree: '#a9553b',
+                treeAccent: '#d18b42',
+            },
+            crystal: {
+                grass: '#6fd1c9',
+                grassAccent: '#9df9f2',
+                stone: '#648a9a',
+                stoneAccent: '#b4f3ff',
+                tree: '#74d7dd',
+                treeAccent: '#b492ff',
+            },
+            desert: {
+                grass: '#c89446',
+                grassAccent: '#e5bd68',
+                stone: '#8b684e',
+                stoneAccent: '#b68b62',
+                tree: '#b8843d',
+                treeAccent: '#dfae56',
+            },
+            home: {
+                grass: '#4f9a5b',
+                grassAccent: '#8bcf68',
+                stone: '#747c74',
+                stoneAccent: '#a0a28f',
+                tree: '#2f7d54',
+                treeAccent: '#69a85d',
+            },
+            lavender: {
+                grass: '#879e62',
+                grassAccent: '#bfa0ee',
+                stone: '#756b7f',
+                stoneAccent: '#a594b7',
+                tree: '#758855',
+                treeAccent: '#a98bdd',
+            },
+            lunar: {
+                grass: '#7f8792',
+                grassAccent: '#c7cedd',
+                stone: '#5e6470',
+                stoneAccent: '#969dab',
+                tree: '#7b8498',
+                treeAccent: '#c7ccd9',
+            },
+            mangrove: {
+                grass: '#34795f',
+                grassAccent: '#60b17a',
+                stone: '#56665b',
+                stoneAccent: '#8b9a7d',
+                tree: '#236b54',
+                treeAccent: '#4b9b66',
+            },
+            meadow: {
+                grass: '#5ca65a',
+                grassAccent: '#a2d66b',
+                stone: '#7b8175',
+                stoneAccent: '#a6aa91',
+                tree: '#3f9a55',
+                treeAccent: '#88c95f',
+            },
+            nebula: {
+                grass: '#6575d6',
+                grassAccent: '#df85ff',
+                stone: '#505583',
+                stoneAccent: '#9aa2ee',
+                tree: '#5f7cff',
+                treeAccent: '#d66bf0',
+            },
+            rocky: {
+                grass: '#7b8879',
+                grassAccent: '#a8b99b',
+                stone: '#667077',
+                stoneAccent: '#9aa1a0',
+                tree: '#718078',
+                treeAccent: '#a1aa91',
+            },
+            tropical: {
+                grass: '#238f6f',
+                grassAccent: '#66cf93',
+                stone: '#5d746b',
+                stoneAccent: '#8d9b86',
+                tree: '#1d9073',
+                treeAccent: '#54c28b',
+            },
+            tundra: {
+                grass: '#93b8aa',
+                grassAccent: '#d7f5ec',
+                stone: '#738089',
+                stoneAccent: '#b9c5c8',
+                tree: '#7aa294',
+                treeAccent: '#d9f6ee',
+            },
+        };
+
+        return colors[biome];
+    }
+
+    private random(index: number, seed: number): number {
+        return (
+            Math.abs(Math.sin(index * 12.9898 + seed * 78.233) * 43758.5453) % 1
+        );
+    }
+
+    private randomSigned(index: number, seed: number): number {
+        return this.random(index, seed) * 2 - 1;
+    }
+
+    private variedColor(
+        base: string,
+        accent: string,
+        index: number,
+        seed: number,
+    ): THREE.Color {
+        return new THREE.Color(base).lerp(
+            new THREE.Color(accent),
+            0.08 + this.random(index, seed) * 0.16,
+        );
+    }
+
+    private seedFromString(value: string): number {
+        let hash = 2166136261;
+
+        for (let index = 0; index < value.length; index += 1) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+
+        return hash >>> 0;
+    }
+
+    private createIrregularCylinderGeometry(
+        topRadius: number,
+        bottomRadius: number,
+        height: number,
+        radialSegments: number,
+        seed: number,
+        strength: number,
+    ): THREE.CylinderGeometry {
+        const geometry = new THREE.CylinderGeometry(
+            topRadius,
+            bottomRadius,
+            height,
+            radialSegments,
+            2,
+        );
+        const positions = geometry.getAttribute('position');
+
+        for (let index = 0; index < positions.count; index += 1) {
+            const x = positions.getX(index);
+            const y = positions.getY(index);
+            const z = positions.getZ(index);
+            const radius = Math.hypot(x, z);
+
+            if (radius < 0.0001) {
+                continue;
+            }
+
+            const angle = Math.atan2(z, x);
+            const expectedRadius = y >= 0 ? topRadius : bottomRadius;
+            const edgeFactor = Math.min(1, radius / expectedRadius);
+            const radialScale =
+                1 +
+                this.radialShapeNoise(angle, seed) *
+                    strength *
+                    (0.55 + edgeFactor * 0.45);
+            const verticalOffset =
+                this.radialShapeNoise(angle + 0.63, seed + 19) *
+                Math.min(0.035, height * 0.035) *
+                Math.max(0, (edgeFactor - 0.45) / 0.55);
+
+            positions.setXYZ(
+                index,
+                x * radialScale,
+                y + verticalOffset,
+                z * radialScale,
+            );
+        }
+
+        positions.needsUpdate = true;
+        geometry.computeVertexNormals();
+
+        return geometry;
+    }
+
+    private radialShapeNoise(angle: number, seed: number): number {
+        const phase = (seed % 997) * 0.017;
+
+        return (
+            Math.sin(angle * 3 + phase) * 0.48 +
+            Math.sin(angle * 5 - phase * 0.73) * 0.32 +
+            Math.sin(angle * 7 + phase * 1.31) * 0.2
+        );
     }
 
     private addIslandProps(group: THREE.Group, island: IslandConfig): void {
@@ -697,7 +1241,10 @@ export class SalemScene implements SalemSceneHandle {
         positions.forEach((position, index) => {
             const tree = new THREE.Group();
             tree.position.set(position[0], 0.12, position[2]);
-            tree.scale.setScalar(index === 1 ? 0.82 : 1);
+            tree.scale.setScalar(
+                (index === 1 ? 0.86 : 0.96) + this.random(index, 84.2) * 0.08,
+            );
+            tree.rotation.y = this.randomSigned(index, 91.7) * 0.14;
 
             const trunk = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.09, 0.12, 0.72, 6),
@@ -742,10 +1289,18 @@ export class SalemScene implements SalemSceneHandle {
     private createFlowers(radius: number): THREE.Group {
         const group = new THREE.Group();
         const colors = ['#f8c8dc', '#ffe28a', '#c7f9ff'];
+        const clusterCount = 4;
 
-        for (let index = 0; index < 18; index += 1) {
-            const angle = index * 2.17;
-            const distance = radius * (0.22 + (index % 5) * 0.11);
+        for (let index = 0; index < 14; index += 1) {
+            const cluster = index % clusterCount;
+            const centerAngle =
+                (cluster / clusterCount) * Math.PI * 2 +
+                this.random(cluster, 142.3) * 0.8;
+            const centerDistance =
+                radius * (0.24 + this.random(cluster, 151.8) * 0.34);
+            const jitterAngle = this.random(index, 163.4) * Math.PI * 2;
+            const jitterDistance =
+                radius * (0.03 + this.random(index, 171.2) * 0.11);
             const flower = new THREE.Mesh(
                 new THREE.DodecahedronGeometry(0.055, 0),
                 new THREE.MeshStandardMaterial({
@@ -753,10 +1308,13 @@ export class SalemScene implements SalemSceneHandle {
                 }),
             );
             flower.position.set(
-                Math.cos(angle) * distance,
+                Math.cos(centerAngle) * centerDistance +
+                    Math.cos(jitterAngle) * jitterDistance,
                 0.73,
-                Math.sin(angle) * distance,
+                Math.sin(centerAngle) * centerDistance +
+                    Math.sin(jitterAngle) * jitterDistance,
             );
+            flower.scale.setScalar(0.94 + this.random(index, 180.6) * 0.12);
             flower.castShadow = true;
             group.add(flower);
         }
