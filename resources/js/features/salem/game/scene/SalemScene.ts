@@ -567,7 +567,7 @@ export class SalemScene implements SalemSceneHandle {
         const grass = new THREE.InstancedMesh(
             new THREE.ConeGeometry(0.035, 0.18, 4),
             new THREE.MeshStandardMaterial({
-                color: colors.grass,
+                color: '#ffffff',
                 roughness: 0.7,
                 flatShading: true,
                 vertexColors: true,
@@ -607,6 +607,10 @@ export class SalemScene implements SalemSceneHandle {
             );
         }
 
+        if (grass.instanceColor) {
+            grass.instanceColor.needsUpdate = true;
+        }
+
         grass.receiveShadow = true;
 
         return grass;
@@ -622,7 +626,7 @@ export class SalemScene implements SalemSceneHandle {
         const pebbles = new THREE.InstancedMesh(
             new THREE.DodecahedronGeometry(0.065, 0),
             new THREE.MeshStandardMaterial({
-                color: colors.stone,
+                color: '#ffffff',
                 roughness: 0.8,
                 flatShading: true,
                 vertexColors: true,
@@ -660,6 +664,10 @@ export class SalemScene implements SalemSceneHandle {
             );
         }
 
+        if (pebbles.instanceColor) {
+            pebbles.instanceColor.needsUpdate = true;
+        }
+
         pebbles.castShadow = true;
         pebbles.receiveShadow = true;
 
@@ -688,7 +696,7 @@ export class SalemScene implements SalemSceneHandle {
         const canopies = new THREE.InstancedMesh(
             new THREE.DodecahedronGeometry(0.2, 1),
             new THREE.MeshStandardMaterial({
-                color: colors.tree,
+                color: '#ffffff',
                 roughness: 0.72,
                 flatShading: true,
                 vertexColors: true,
@@ -729,6 +737,10 @@ export class SalemScene implements SalemSceneHandle {
                 index,
                 this.variedColor(colors.tree, colors.treeAccent, index, 7.1),
             );
+        }
+
+        if (canopies.instanceColor) {
+            canopies.instanceColor.needsUpdate = true;
         }
 
         trunks.castShadow = true;
