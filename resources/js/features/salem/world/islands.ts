@@ -78,8 +78,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [0, 0, 0],
         radius: 3.6,
         height: 1.15,
-        color: '#78b96a',
-        soilColor: '#5f463e',
+        color: '#73aa68',
+        soilColor: '#6b554a',
         props: [
             'cabin',
             'chair',
@@ -191,8 +191,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [-4.8, -0.5, -2.55],
         radius: 1.75,
         height: 0.8,
-        color: '#91c76d',
-        soilColor: '#6e5644',
+        color: '#83b36b',
+        soilColor: '#705e50',
         props: ['trees', 'flowers'],
         assetPlacements: [
             {
@@ -233,8 +233,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [4.65, -0.85, -3.25],
         radius: 2.05,
         height: 1.25,
-        color: '#8f9784',
-        soilColor: '#4d4d57',
+        color: '#838b7c',
+        soilColor: '#606066',
         props: ['rocks', 'lantern'],
         assetPlacements: [
             {
@@ -275,8 +275,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [3.55, -1.05, 2.45],
         radius: 1.95,
         height: 0.9,
-        color: '#48a879',
-        soilColor: '#475846',
+        color: '#519a76',
+        soilColor: '#536458',
         props: ['trees', 'pool', 'rocks'],
         assetPlacements: [
             {
@@ -325,8 +325,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [-3.55, -1.15, 2.75],
         radius: 1.65,
         height: 0.95,
-        color: '#c07a42',
-        soilColor: '#5f3f35',
+        color: '#b87850',
+        soilColor: '#6b5047',
         props: ['trees', 'stumps', 'rocks'],
         assetPlacements: [
             {
@@ -367,8 +367,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [-6.25, -0.95, 0.65],
         radius: 1.42,
         height: 0.72,
-        color: '#d0a357',
-        soilColor: '#6a4838',
+        color: '#c29a62',
+        soilColor: '#715748',
         props: ['rocks', 'stumps'],
         assetPlacements: [
             {
@@ -402,8 +402,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [6.9, -1.25, 0.1],
         radius: 1.55,
         height: 0.8,
-        color: '#b8cdbc',
-        soilColor: '#56626b',
+        color: '#a9beb5',
+        soilColor: '#626d72',
         props: ['trees', 'rocks', 'lantern'],
         assetPlacements: [
             {
@@ -437,8 +437,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [1.25, -1.85, 4.9],
         radius: 1.72,
         height: 0.86,
-        color: '#459672',
-        soilColor: '#465944',
+        color: '#4f896f',
+        soilColor: '#536258',
         props: ['trees', 'pool', 'rocks'],
         assetPlacements: [
             {
@@ -473,8 +473,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [-1.1, -1.7, -5.45],
         radius: 1.5,
         height: 0.78,
-        color: '#9cad70',
-        soilColor: '#665469',
+        color: '#929f78',
+        soilColor: '#6b5e6d',
         props: ['flowers', 'trees'],
         assetPlacements: [
             {
@@ -508,8 +508,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [5.35, -2.2, 4.9],
         radius: 1.25,
         height: 0.68,
-        color: '#69b8ad',
-        soilColor: '#425a68',
+        color: '#70a79f',
+        soilColor: '#526773',
         props: ['rocks', 'flowers'],
         assetPlacements: [
             {
@@ -536,8 +536,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [8.2, -2.65, -3.95],
         radius: 1.36,
         height: 0.95,
-        color: '#777d88',
-        soilColor: '#3b3e4c',
+        color: '#757a84',
+        soilColor: '#51535f',
         props: ['rocks', 'lantern'],
         assetPlacements: [
             {
@@ -564,8 +564,8 @@ export const islandConfigs: IslandConfig[] = [
         position: [-7.8, -2.35, -4.2],
         radius: 1.28,
         height: 0.72,
-        color: '#6670c9',
-        soilColor: '#38375b',
+        color: '#7276aa',
+        soilColor: '#514f6a',
         props: ['trees', 'flowers', 'lantern'],
         assetPlacements: [
             {
