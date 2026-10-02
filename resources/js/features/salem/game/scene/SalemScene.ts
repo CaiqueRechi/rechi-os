@@ -229,7 +229,7 @@ export class SalemScene implements SalemSceneHandle {
     private configureRenderer(): void {
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.45));
         this.renderer.shadowMap.enabled = true;
-        this.renderer.shadowMap.type = THREE.PCFShadowMap;
+        this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.06;
@@ -245,7 +245,7 @@ export class SalemScene implements SalemSceneHandle {
         this.scene.add(this.atmosphere);
         this.scene.add(this.root);
 
-        this.hemisphere = new THREE.HemisphereLight('#eefcff', '#83745f', 2.15);
+        this.hemisphere = new THREE.HemisphereLight('#eefcff', '#83745f', 1.05);
         this.scene.add(this.hemisphere);
 
         this.sunlight = new THREE.DirectionalLight('#fff2c8', 2.7);
@@ -258,7 +258,7 @@ export class SalemScene implements SalemSceneHandle {
         this.sunlight.shadow.camera.bottom = -6;
         this.scene.add(this.sunlight);
 
-        const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.82);
+        const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.3);
         fillLight.position.set(6, 3, -5);
         this.scene.add(fillLight);
 
@@ -290,18 +290,22 @@ export class SalemScene implements SalemSceneHandle {
 
         const islandScale =
             island.id === 'home' ? new THREE.Vector3(1.16, 1, 0.82) : null;
+        const islandSeed = this.seedFromString(island.id);
 
         const grass = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius,
                 island.radius * 0.94,
                 0.3,
-                18,
+                28,
+                islandSeed,
+                0.075,
             ),
             new THREE.MeshStandardMaterial({
                 color: island.color,
-                roughness: 0.86,
-                flatShading: true,
+                roughness: 0.82,
+                metalness: 0,
+                flatShading: false,
             }),
         );
         grass.position.y = island.height * 0.5;
@@ -315,16 +319,19 @@ export class SalemScene implements SalemSceneHandle {
         group.add(grass);
 
         const rim = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius * 1.01,
                 island.radius * 0.98,
                 0.12,
-                18,
+                28,
+                islandSeed,
+                0.09,
             ),
             new THREE.MeshStandardMaterial({
                 color: '#325f48',
-                roughness: 0.82,
-                flatShading: true,
+                roughness: 0.78,
+                metalness: 0,
+                flatShading: false,
             }),
         );
         rim.position.y = island.height * 0.34;
@@ -364,21 +371,26 @@ export class SalemScene implements SalemSceneHandle {
         const scale = islandScale ?? new THREE.Vector3(1, 1, 1);
         const rockMaterial = new THREE.MeshStandardMaterial({
             color: island.soilColor,
-            roughness: 0.96,
-            flatShading: true,
+            roughness: 0.82,
+            metalness: 0,
+            flatShading: false,
         });
         const darkRockMaterial = new THREE.MeshStandardMaterial({
             color: '#3f3d46',
-            roughness: 0.98,
-            flatShading: true,
+            roughness: 0.85,
+            metalness: 0,
+            flatShading: false,
         });
+        const islandSeed = this.seedFromString(island.id);
 
         const upperRock = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius * 0.94,
                 island.radius * 0.76,
                 island.height * 0.72,
-                16,
+                24,
+                islandSeed + 17,
+                0.12,
             ),
             rockMaterial,
         );
@@ -389,11 +401,13 @@ export class SalemScene implements SalemSceneHandle {
         group.add(upperRock);
 
         const lowerRock = new THREE.Mesh(
-            new THREE.CylinderGeometry(
+            this.createIrregularCylinderGeometry(
                 island.radius * 0.58,
                 island.radius * 0.4,
                 island.height * 0.46,
-                12,
+                20,
+                islandSeed + 41,
+                0.17,
             ),
             darkRockMaterial,
         );
@@ -534,13 +548,13 @@ export class SalemScene implements SalemSceneHandle {
         islandScale: THREE.Vector3,
     ): THREE.InstancedMesh {
         const count =
-            island.id === 'home' ? 120 : Math.round(28 + island.radius * 18);
+            island.id === 'home' ? 48 : Math.round(12 + island.radius * 10);
         const colors = this.scatterColorsForBiome(island.biome);
         const grass = new THREE.InstancedMesh(
             new THREE.ConeGeometry(0.025, 0.28, 3),
             new THREE.MeshStandardMaterial({
                 color: colors.grass,
-                roughness: 0.92,
+                roughness: 0.74,
                 flatShading: true,
                 vertexColors: true,
             }),
@@ -563,21 +577,17 @@ export class SalemScene implements SalemSceneHandle {
                 this.randomSigned(index, 11.2) * 0.14,
             );
             quaternion.setFromEuler(rotation);
-            const height = 0.72 + this.random(index, 18.4) * 0.62;
+            const height = 0.92 + this.random(index, 18.4) * 0.16;
             size.set(
-                0.78 + this.random(index, 41.2) * 0.55,
+                0.92 + this.random(index, 41.2) * 0.16,
                 height,
-                0.78 + this.random(index, 51.2) * 0.42,
+                0.92 + this.random(index, 51.2) * 0.16,
             );
             matrix.compose(position, quaternion, size);
             grass.setMatrixAt(index, matrix);
             grass.setColorAt(
                 index,
-                new THREE.Color(
-                    this.random(index, 4.8) > 0.45
-                        ? colors.grass
-                        : colors.grassAccent,
-                ),
+                this.variedColor(colors.grass, colors.grassAccent, index, 4.8),
             );
         }
 
@@ -591,13 +601,13 @@ export class SalemScene implements SalemSceneHandle {
         islandScale: THREE.Vector3,
     ): THREE.InstancedMesh {
         const count =
-            island.id === 'home' ? 48 : Math.round(12 + island.radius * 10);
+            island.id === 'home' ? 20 : Math.round(6 + island.radius * 5);
         const colors = this.scatterColorsForBiome(island.biome);
         const pebbles = new THREE.InstancedMesh(
             new THREE.DodecahedronGeometry(0.065, 0),
             new THREE.MeshStandardMaterial({
                 color: colors.stone,
-                roughness: 0.96,
+                roughness: 0.8,
                 flatShading: true,
                 vertexColors: true,
             }),
@@ -630,11 +640,7 @@ export class SalemScene implements SalemSceneHandle {
             pebbles.setMatrixAt(index, matrix);
             pebbles.setColorAt(
                 index,
-                new THREE.Color(
-                    this.random(index, 1.8) > 0.5
-                        ? colors.stone
-                        : colors.stoneAccent,
-                ),
+                this.variedColor(colors.stone, colors.stoneAccent, index, 1.8),
             );
         }
 
@@ -651,14 +657,14 @@ export class SalemScene implements SalemSceneHandle {
         const group = new THREE.Group();
         const count =
             island.id === 'home'
-                ? 8
-                : Math.max(3, Math.round(island.radius * 2.2));
+                ? 6
+                : Math.max(2, Math.round(island.radius * 1.6));
         const colors = this.scatterColorsForBiome(island.biome);
         const trunks = new THREE.InstancedMesh(
             new THREE.CylinderGeometry(0.025, 0.04, 0.42, 5),
             new THREE.MeshStandardMaterial({
                 color: '#6b4935',
-                roughness: 0.9,
+                roughness: 0.65,
                 flatShading: true,
             }),
             count,
@@ -667,7 +673,7 @@ export class SalemScene implements SalemSceneHandle {
             new THREE.ConeGeometry(0.18, 0.46, 6),
             new THREE.MeshStandardMaterial({
                 color: colors.tree,
-                roughness: 0.86,
+                roughness: 0.72,
                 flatShading: true,
                 vertexColors: true,
             }),
@@ -687,8 +693,8 @@ export class SalemScene implements SalemSceneHandle {
             quaternion.setFromEuler(rotation);
             const treeSize =
                 island.id === 'home'
-                    ? 0.72 + this.random(index, 44.5) * 0.34
-                    : 0.58 + this.random(index, 44.5) * 0.32;
+                    ? 0.92 + this.random(index, 44.5) * 0.16
+                    : 0.84 + this.random(index, 44.5) * 0.16;
 
             position.y += 0.2 * treeSize;
             size.setScalar(treeSize);
@@ -696,16 +702,12 @@ export class SalemScene implements SalemSceneHandle {
             trunks.setMatrixAt(index, matrix);
 
             position.y += 0.33 * treeSize;
-            size.setScalar(treeSize * (0.82 + this.random(index, 18.9) * 0.28));
+            size.setScalar(treeSize * (0.94 + this.random(index, 18.9) * 0.12));
             matrix.compose(position, quaternion, size);
             canopies.setMatrixAt(index, matrix);
             canopies.setColorAt(
                 index,
-                new THREE.Color(
-                    this.random(index, 7.1) > 0.45
-                        ? colors.tree
-                        : colors.treeAccent,
-                ),
+                this.variedColor(colors.tree, colors.treeAccent, index, 7.1),
             );
         }
 
@@ -723,18 +725,48 @@ export class SalemScene implements SalemSceneHandle {
         index: number,
         seed: number,
     ): THREE.Vector3 {
-        let angle = 0;
-        let distance = 0;
+        const islandSeed = (this.seedFromString(island.id) % 10000) / 101;
+        const clusterCount = island.id === 'home' ? 5 : 3;
+        let point = new THREE.Vector3();
 
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-            const cursor = index + attempt * 19;
-            angle = cursor * 2.399963 + this.random(cursor, seed) * 0.52;
-            distance =
-                island.radius * (0.18 + this.random(cursor, seed + 7.1) * 0.72);
-            const point = new THREE.Vector3(
-                Math.cos(angle) * distance * islandScale.x,
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+            const cursor = index + attempt * 23;
+            const cluster = Math.floor(
+                this.random(cursor, seed + islandSeed) * clusterCount,
+            );
+            const centerAngle =
+                (cluster / clusterCount) * Math.PI * 2 +
+                this.random(cluster, seed + islandSeed + 4.7) * 1.15;
+            const centerDistance =
+                island.radius *
+                (0.22 + this.random(cluster, seed + islandSeed + 11.3) * 0.42);
+            const spread =
+                island.radius *
+                (0.06 + this.random(cluster, seed + islandSeed + 18.1) * 0.12);
+            const jitterAngle =
+                this.random(cursor, seed + islandSeed + 27.9) * Math.PI * 2;
+            const jitterDistance =
+                spread *
+                Math.sqrt(this.random(cursor, seed + islandSeed + 35.6));
+            let x =
+                Math.cos(centerAngle) * centerDistance +
+                Math.cos(jitterAngle) * jitterDistance;
+            let z =
+                Math.sin(centerAngle) * centerDistance +
+                Math.sin(jitterAngle) * jitterDistance;
+            const distance = Math.hypot(x, z);
+            const maximumDistance = island.radius * 0.82;
+
+            if (distance > maximumDistance) {
+                const clamp = maximumDistance / distance;
+                x *= clamp;
+                z *= clamp;
+            }
+
+            point = new THREE.Vector3(
+                x * islandScale.x,
                 island.height * 0.5 + 0.17,
-                Math.sin(angle) * distance * islandScale.z,
+                z * islandScale.z,
             );
 
             if (!this.isProtectedScatterPoint(island, point)) {
@@ -742,11 +774,7 @@ export class SalemScene implements SalemSceneHandle {
             }
         }
 
-        return new THREE.Vector3(
-            Math.cos(angle) * distance * islandScale.x,
-            island.height * 0.5 + 0.17,
-            Math.sin(angle) * distance * islandScale.z,
-        );
+        return point;
     }
 
     private isProtectedScatterPoint(
@@ -904,6 +932,93 @@ export class SalemScene implements SalemSceneHandle {
 
     private randomSigned(index: number, seed: number): number {
         return this.random(index, seed) * 2 - 1;
+    }
+
+    private variedColor(
+        base: string,
+        accent: string,
+        index: number,
+        seed: number,
+    ): THREE.Color {
+        return new THREE.Color(base).lerp(
+            new THREE.Color(accent),
+            0.08 + this.random(index, seed) * 0.16,
+        );
+    }
+
+    private seedFromString(value: string): number {
+        let hash = 2166136261;
+
+        for (let index = 0; index < value.length; index += 1) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+
+        return hash >>> 0;
+    }
+
+    private createIrregularCylinderGeometry(
+        topRadius: number,
+        bottomRadius: number,
+        height: number,
+        radialSegments: number,
+        seed: number,
+        strength: number,
+    ): THREE.CylinderGeometry {
+        const geometry = new THREE.CylinderGeometry(
+            topRadius,
+            bottomRadius,
+            height,
+            radialSegments,
+            2,
+        );
+        const positions = geometry.getAttribute('position');
+
+        for (let index = 0; index < positions.count; index += 1) {
+            const x = positions.getX(index);
+            const y = positions.getY(index);
+            const z = positions.getZ(index);
+            const radius = Math.hypot(x, z);
+
+            if (radius < 0.0001) {
+                continue;
+            }
+
+            const angle = Math.atan2(z, x);
+            const expectedRadius = y >= 0 ? topRadius : bottomRadius;
+            const edgeFactor = Math.min(1, radius / expectedRadius);
+            const radialScale =
+                1 +
+                this.radialShapeNoise(angle, seed) *
+                    strength *
+                    (0.55 + edgeFactor * 0.45);
+            const verticalOffset =
+                this.radialShapeNoise(angle + 0.63, seed + 19) *
+                Math.min(0.035, height * 0.035) *
+                Math.max(0, (edgeFactor - 0.45) / 0.55);
+
+            positions.setXYZ(
+                index,
+                x * radialScale,
+                y + verticalOffset,
+                z * radialScale,
+            );
+        }
+
+        positions.needsUpdate = true;
+        geometry.computeVertexNormals();
+
+        return geometry;
+    }
+
+    private radialShapeNoise(angle: number, seed: number): number {
+        const phase = (seed % 997) * 0.017;
+
+        return (
+            Math.sin(angle * 3 + phase) * 0.48 +
+            Math.sin(angle * 5 - phase * 0.73) * 0.32 +
+            Math.sin(angle * 7 + phase * 1.31) * 0.2
+        );
     }
 
     private addIslandProps(group: THREE.Group, island: IslandConfig): void {
@@ -1506,7 +1621,10 @@ export class SalemScene implements SalemSceneHandle {
         positions.forEach((position, index) => {
             const tree = new THREE.Group();
             tree.position.set(position[0], 0.12, position[2]);
-            tree.scale.setScalar(index === 1 ? 0.82 : 1);
+            tree.scale.setScalar(
+                (index === 1 ? 0.86 : 0.96) + this.random(index, 84.2) * 0.08,
+            );
+            tree.rotation.y = this.randomSigned(index, 91.7) * 0.14;
 
             const trunk = new THREE.Mesh(
                 new THREE.CylinderGeometry(0.09, 0.12, 0.72, 6),
@@ -1551,10 +1669,18 @@ export class SalemScene implements SalemSceneHandle {
     private createFlowers(radius: number): THREE.Group {
         const group = new THREE.Group();
         const colors = ['#f8c8dc', '#ffe28a', '#c7f9ff'];
+        const clusterCount = 4;
 
-        for (let index = 0; index < 18; index += 1) {
-            const angle = index * 2.17;
-            const distance = radius * (0.22 + (index % 5) * 0.11);
+        for (let index = 0; index < 14; index += 1) {
+            const cluster = index % clusterCount;
+            const centerAngle =
+                (cluster / clusterCount) * Math.PI * 2 +
+                this.random(cluster, 142.3) * 0.8;
+            const centerDistance =
+                radius * (0.24 + this.random(cluster, 151.8) * 0.34);
+            const jitterAngle = this.random(index, 163.4) * Math.PI * 2;
+            const jitterDistance =
+                radius * (0.03 + this.random(index, 171.2) * 0.11);
             const flower = new THREE.Mesh(
                 new THREE.DodecahedronGeometry(0.055, 0),
                 new THREE.MeshStandardMaterial({
@@ -1562,10 +1688,13 @@ export class SalemScene implements SalemSceneHandle {
                 }),
             );
             flower.position.set(
-                Math.cos(angle) * distance,
+                Math.cos(centerAngle) * centerDistance +
+                    Math.cos(jitterAngle) * jitterDistance,
                 0.73,
-                Math.sin(angle) * distance,
+                Math.sin(centerAngle) * centerDistance +
+                    Math.sin(jitterAngle) * jitterDistance,
             );
+            flower.scale.setScalar(0.94 + this.random(index, 180.6) * 0.12);
             flower.castShadow = true;
             group.add(flower);
         }

@@ -50,6 +50,13 @@ const assetColors: Partial<Record<SalemAssetKey, string>> = {
     'prop.fence': '#73513b',
 };
 
+type MaterialProfile = {
+    roughnessCeiling?: number;
+    forceNonMetal: boolean;
+    metalnessCeiling?: number;
+    tintStrength: number;
+};
+
 export class SalemAssetLoader {
     private readonly loader = new GLTFLoader();
 
@@ -77,8 +84,13 @@ export class SalemAssetLoader {
         const group = new THREE.Group();
 
         this.configureShadows(instance);
-        this.applyMaterialTheme(key, instance);
+        this.applyMaterialTheme(
+            key,
+            instance,
+            `${key}:${transform.position.join(':')}`,
+        );
         this.applyTransform(group, transform);
+        this.applyInstanceVariation(key, group, transform);
         group.add(instance);
 
         return group;
@@ -100,12 +112,12 @@ export class SalemAssetLoader {
     public applyMaterialTheme(
         key: SalemAssetKey,
         object: THREE.Object3D,
+        variationKey: string = key,
     ): void {
-        const color = assetColors[key];
-
-        if (!color) {
-            return;
-        }
+        const tint = assetColors[key];
+        const profile = this.materialProfile(key);
+        const tintVariation =
+            this.deterministicUnit(`${variationKey}:tint`) * 0.04;
 
         object.traverse((child) => {
             const mesh = child as THREE.Mesh;
@@ -114,13 +126,153 @@ export class SalemAssetLoader {
                 return;
             }
 
-            mesh.material = new THREE.MeshStandardMaterial({
-                color,
-                roughness: 0.82,
-                metalness: 0,
-                flatShading: true,
-            });
+            mesh.material = Array.isArray(mesh.material)
+                ? mesh.material.map((material) =>
+                      this.cloneAndThemeMaterial(
+                          material,
+                          tint,
+                          profile,
+                          tintVariation,
+                      ),
+                  )
+                : this.cloneAndThemeMaterial(
+                      mesh.material,
+                      tint,
+                      profile,
+                      tintVariation,
+                  );
         });
+    }
+
+    private cloneAndThemeMaterial(
+        source: THREE.Material,
+        tint: string | undefined,
+        profile: MaterialProfile,
+        tintVariation: number,
+    ): THREE.Material {
+        const material = source.clone();
+
+        if (!(material instanceof THREE.MeshStandardMaterial)) {
+            material.needsUpdate = true;
+
+            return material;
+        }
+
+        material.flatShading = false;
+
+        if (tint) {
+            material.color.lerp(
+                new THREE.Color(tint),
+                Math.min(0.25, profile.tintStrength + tintVariation),
+            );
+        }
+
+        if (profile.roughnessCeiling !== undefined) {
+            material.roughness = Math.min(
+                material.roughness,
+                profile.roughnessCeiling,
+            );
+        }
+
+        if (profile.forceNonMetal) {
+            material.metalness = 0;
+        } else if (profile.metalnessCeiling !== undefined) {
+            material.metalness = Math.min(
+                material.metalness,
+                profile.metalnessCeiling,
+            );
+        }
+
+        material.needsUpdate = true;
+
+        return material;
+    }
+
+    private materialProfile(key: SalemAssetKey): MaterialProfile {
+        if (this.isWood(key)) {
+            return {
+                roughnessCeiling: 0.68,
+                forceNonMetal: true,
+                tintStrength: 0.12,
+            };
+        }
+
+        if (this.isVegetation(key)) {
+            return {
+                roughnessCeiling: 0.72,
+                forceNonMetal: true,
+                tintStrength: 0.14,
+            };
+        }
+
+        if (key.startsWith('nature.rock')) {
+            return {
+                roughnessCeiling: 0.8,
+                forceNonMetal: false,
+                metalnessCeiling: 0.12,
+                tintStrength: 0.1,
+            };
+        }
+
+        if (key === 'nature.pathRoundWide') {
+            return {
+                roughnessCeiling: 0.84,
+                forceNonMetal: true,
+                tintStrength: 0.12,
+            };
+        }
+
+        return {
+            roughnessCeiling: 0.72,
+            forceNonMetal: false,
+            tintStrength: 0.1,
+        };
+    }
+
+    private isVegetation(key: SalemAssetKey): boolean {
+        return (
+            key.startsWith('nature.') &&
+            !key.startsWith('nature.rock') &&
+            key !== 'nature.pathRoundWide'
+        );
+    }
+
+    private isWood(key: SalemAssetKey): boolean {
+        return (
+            key === 'building.homeCabin' ||
+            key === 'nature.twistedTree' ||
+            key.startsWith('prop.')
+        );
+    }
+
+    private applyInstanceVariation(
+        key: SalemStaticAssetKey,
+        object: THREE.Object3D,
+        transform: SalemAssetTransform,
+    ): void {
+        if (!key.startsWith('nature.')) {
+            return;
+        }
+
+        const identity = `${key}:${transform.position.join(':')}`;
+        const scaleVariation =
+            0.95 + this.deterministicUnit(`${identity}:scale`) * 0.1;
+        const rotationVariation =
+            (this.deterministicUnit(`${identity}:rotation`) * 2 - 1) * 0.12;
+
+        object.scale.multiplyScalar(scaleVariation);
+        object.rotation.y += rotationVariation;
+    }
+
+    private deterministicUnit(value: string): number {
+        let hash = 2166136261;
+
+        for (let index = 0; index < value.length; index += 1) {
+            hash ^= value.charCodeAt(index);
+            hash = Math.imul(hash, 16777619);
+        }
+
+        return (hash >>> 0) / 4294967295;
     }
 
     private applyTransform(
