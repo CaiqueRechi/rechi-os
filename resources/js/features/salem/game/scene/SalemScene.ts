@@ -15,7 +15,9 @@ import { SalemAssetLoader } from '../assets/SalemAssetLoader';
 
 type SalemSceneOptions = {
     onActionChange: (action: SalemAction) => void;
+    onActionRequest: (action: SalemAction) => void;
     onAssetError: (message: string) => void;
+    onWeatherChange: (weather: SalemWeather) => void;
 };
 
 type Waterfall = {
@@ -25,8 +27,31 @@ type Waterfall = {
     height: number;
 };
 
+type InteractionTarget = {
+    action: SalemAction;
+    target?: THREE.Vector3;
+    weather?: SalemWeather;
+};
+
+type FloatingIsland = {
+    group: THREE.Group;
+    baseY: number;
+    phase: number;
+    speed: number;
+    amplitude: number;
+};
+
+type AnimatedFeature = {
+    object: THREE.Object3D;
+    baseY: number;
+    phase: number;
+    spin: number;
+    bob: number;
+};
+
 export type SalemSceneHandle = {
     forceAction: (action: SalemAction) => void;
+    moveTo: (target: [number, number, number]) => void;
     resetPosition: () => void;
     setWeather: (weather: SalemWeather) => void;
     dispose: () => void;
@@ -39,7 +64,9 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly atmosphere = new THREE.Group();
 
-    private readonly clock = new THREE.Clock();
+    private readonly raycaster = new THREE.Raycaster();
+
+    private readonly pointer = new THREE.Vector2();
 
     private readonly camera: THREE.OrthographicCamera;
 
@@ -53,21 +80,38 @@ export class SalemScene implements SalemSceneHandle {
 
     private readonly laptopCodeLines: THREE.Mesh[] = [];
 
+    private readonly interactionTargets = new Map<
+        THREE.Object3D,
+        InteractionTarget
+    >();
+
+    private readonly floatingIslands: FloatingIsland[] = [];
+
+    private readonly animatedFeatures: AnimatedFeature[] = [];
+
     private readonly programmingPaws = new THREE.Group();
+
+    private readonly fallbackSalem = new THREE.Group();
 
     private readonly catAnchor = new THREE.Group();
 
     private readonly options: SalemSceneOptions;
 
-    private readonly salemActions = new Map<string, THREE.AnimationAction>();
+    private salemBody?: THREE.Object3D;
+
+    private salemHead?: THREE.Object3D;
+
+    private salemTail?: THREE.Object3D;
+
+    private readonly salemEyes: THREE.Object3D[] = [];
 
     private animationFrame: number | null = null;
 
-    private salemMixer?: THREE.AnimationMixer;
+    private lastRenderAt = 0;
 
-    private activeSalemAnimation?: THREE.AnimationAction;
+    private lastTickAt = performance.now();
 
-    private activeSalemAnimationName?: string;
+    private elapsedSeconds = 0;
 
     private sunlight?: THREE.DirectionalLight;
 
@@ -83,7 +127,16 @@ export class SalemScene implements SalemSceneHandle {
 
     private rootRotation = -0.28;
 
-    private pointerStart: { x: number; rotation: number } | null = null;
+    private manualMoveTarget?: THREE.Vector3;
+
+    private desiredFacing = -0.55;
+
+    private pointerStart: {
+        x: number;
+        y: number;
+        rotation: number;
+        dragging: boolean;
+    } | null = null;
 
     public constructor(
         private readonly container: HTMLElement,
@@ -100,7 +153,6 @@ export class SalemScene implements SalemSceneHandle {
         this.configureRenderer();
         this.createWorld();
         this.createSalemFallback();
-        this.loadSalemAsset();
         this.attachEvents();
         this.setWeather('clear');
         this.resize();
@@ -108,9 +160,14 @@ export class SalemScene implements SalemSceneHandle {
     }
 
     public forceAction(action: SalemAction): void {
+        this.manualMoveTarget = undefined;
         this.currentAction = action;
         this.actionStartedAt = performance.now();
         this.options.onActionChange(action);
+    }
+
+    public moveTo(target: [number, number, number]): void {
+        this.moveSalemTo(new THREE.Vector3(...target));
     }
 
     public resetPosition(): void {
@@ -170,13 +227,14 @@ export class SalemScene implements SalemSceneHandle {
     }
 
     private configureRenderer(): void {
-        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.9));
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.45));
         this.renderer.shadowMap.enabled = true;
         this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
         this.renderer.outputColorSpace = THREE.SRGBColorSpace;
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.12;
+        this.renderer.toneMappingExposure = 1.06;
         this.renderer.domElement.className = 'block size-full';
+        this.renderer.domElement.style.cursor = 'grab';
         this.container.appendChild(this.renderer.domElement);
     }
 
@@ -193,11 +251,11 @@ export class SalemScene implements SalemSceneHandle {
         this.sunlight = new THREE.DirectionalLight('#fff2c8', 2.7);
         this.sunlight.position.set(-5, 9, 7);
         this.sunlight.castShadow = true;
-        this.sunlight.shadow.mapSize.set(2048, 2048);
-        this.sunlight.shadow.camera.left = -9;
-        this.sunlight.shadow.camera.right = 9;
-        this.sunlight.shadow.camera.top = 8;
-        this.sunlight.shadow.camera.bottom = -8;
+        this.sunlight.shadow.mapSize.set(1024, 1024);
+        this.sunlight.shadow.camera.left = -7;
+        this.sunlight.shadow.camera.right = 7;
+        this.sunlight.shadow.camera.top = 6;
+        this.sunlight.shadow.camera.bottom = -6;
         this.scene.add(this.sunlight);
 
         const fillLight = new THREE.DirectionalLight('#8fe1ff', 0.3);
@@ -221,6 +279,14 @@ export class SalemScene implements SalemSceneHandle {
     private createIsland(island: IslandConfig): THREE.Group {
         const group = new THREE.Group();
         group.position.set(...island.position);
+        this.floatingIslands.push({
+            group,
+            baseY: island.position[1],
+            phase: island.position[0] * 0.47 + island.position[2] * 0.29,
+            speed: island.id === 'home' ? 0.24 : 0.18 + island.radius * 0.025,
+            amplitude:
+                island.id === 'home' ? 0.025 : 0.035 + island.radius * 0.006,
+        });
 
         const islandScale =
             island.id === 'home' ? new THREE.Vector3(1.16, 1, 0.82) : null;
@@ -246,6 +312,10 @@ export class SalemScene implements SalemSceneHandle {
         grass.scale.copy(islandScale ?? new THREE.Vector3(1, 1, 1));
         grass.castShadow = true;
         grass.receiveShadow = true;
+        this.registerInteraction(grass, {
+            action: 'walk',
+            weather: island.weatherHint,
+        });
         group.add(grass);
 
         const rim = new THREE.Mesh(
@@ -274,7 +344,11 @@ export class SalemScene implements SalemSceneHandle {
 
         this.addGrassDetails(group, island, islandScale);
 
+        this.addGroundScatter(group, island, islandScale);
+
         this.addIslandProps(group, island);
+
+        this.addBiomeFeatures(group, island);
 
         island.waterfalls?.forEach((waterfall) => {
             const createdWaterfall = this.createWaterfall(
@@ -356,7 +430,9 @@ export class SalemScene implements SalemSceneHandle {
         glowRing.scale.set(scale.x * 0.8, scale.z * 0.8, 1);
         group.add(glowRing);
 
-        for (let index = 0; index < 10; index += 1) {
+        const shardCount = island.id === 'home' ? 8 : 5;
+
+        for (let index = 0; index < shardCount; index += 1) {
             const angle = index * 1.71;
             const distance = island.radius * (0.34 + (index % 4) * 0.12);
             const shard = new THREE.Mesh(
@@ -385,9 +461,9 @@ export class SalemScene implements SalemSceneHandle {
         islandScale: THREE.Vector3 | null,
     ): void {
         const highlight = new THREE.Mesh(
-            new THREE.CircleGeometry(island.radius * 0.72, 32),
+            new THREE.CircleGeometry(island.radius * 0.72, 24),
             new THREE.MeshBasicMaterial({
-                color: island.biome === 'autumn' ? '#f2a45d' : '#a7df72',
+                color: this.highlightColorForBiome(island.biome),
                 transparent: true,
                 opacity: island.id === 'home' ? 0.22 : 0.16,
             }),
@@ -398,9 +474,9 @@ export class SalemScene implements SalemSceneHandle {
         group.add(highlight);
 
         const path = new THREE.Mesh(
-            new THREE.CircleGeometry(island.radius * 0.36, 24),
+            new THREE.CircleGeometry(island.radius * 0.36, 18),
             new THREE.MeshBasicMaterial({
-                color: island.biome === 'rocky' ? '#a5aea8' : '#e2bf8f',
+                color: this.pathColorForBiome(island.biome),
                 transparent: true,
                 opacity: island.id === 'home' ? 0.26 : 0.12,
             }),
@@ -1000,12 +1076,245 @@ export class SalemScene implements SalemSceneHandle {
         this.addAssetRole(group, island, 'decor');
     }
 
+    private addBiomeFeatures(group: THREE.Group, island: IslandConfig): void {
+        if (island.biome === 'crystal') {
+            group.add(
+                this.createCrystalCluster([
+                    [-0.35, 0.52, -0.35],
+                    [0.15, 0.52, 0.15],
+                    [0.48, 0.52, -0.25],
+                ]),
+            );
+        }
+
+        if (island.biome === 'lunar') {
+            group.add(this.createLunarRing(island.radius));
+        }
+
+        if (island.biome === 'nebula') {
+            group.add(this.createNebulaBeacon(island.radius));
+        }
+
+        if (island.biome === 'desert') {
+            group.add(this.createDuneNeedles());
+        }
+
+        if (island.biome === 'mangrove') {
+            group.add(this.createMangroveRoots());
+        }
+
+        if (island.biome === 'lavender') {
+            group.add(this.createLavenderWisps(island.radius));
+        }
+
+        if (island.biome === 'tundra') {
+            group.add(this.createFrostCrystals());
+        }
+    }
+
+    private createCrystalCluster(
+        positions: [number, number, number][],
+    ): THREE.Group {
+        const group = new THREE.Group();
+        const colors = ['#8ff8ff', '#bda7ff', '#70f0ca'];
+
+        positions.forEach((position, index) => {
+            const crystal = new THREE.Mesh(
+                new THREE.ConeGeometry(0.13 + index * 0.035, 0.72, 5),
+                new THREE.MeshStandardMaterial({
+                    color: colors[index % colors.length],
+                    emissive: colors[index % colors.length],
+                    emissiveIntensity: 0.25,
+                    roughness: 0.38,
+                    flatShading: true,
+                }),
+            );
+            crystal.position.set(...position);
+            crystal.rotation.set(0.2, index * 0.8, -0.12);
+            crystal.castShadow = true;
+            group.add(crystal);
+            this.animatedFeatures.push({
+                object: crystal,
+                baseY: position[1],
+                phase: index * 0.9,
+                spin: 0.08,
+                bob: 0.035,
+            });
+        });
+
+        return group;
+    }
+
+    private createLunarRing(radius: number): THREE.Group {
+        const group = new THREE.Group();
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(radius * 0.48, 0.018, 6, 56),
+            new THREE.MeshBasicMaterial({
+                color: '#dbe7ff',
+                transparent: true,
+                opacity: 0.72,
+            }),
+        );
+        ring.position.y = 0.82;
+        ring.rotation.x = Math.PI * 0.5;
+        group.add(ring);
+        this.animatedFeatures.push({
+            object: ring,
+            baseY: ring.position.y,
+            phase: 1.4,
+            spin: 0.18,
+            bob: 0.025,
+        });
+
+        return group;
+    }
+
+    private createNebulaBeacon(radius: number): THREE.Group {
+        const group = new THREE.Group();
+        const core = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.22, 0),
+            new THREE.MeshStandardMaterial({
+                color: '#ff8ff4',
+                emissive: '#8957ff',
+                emissiveIntensity: 0.8,
+                roughness: 0.45,
+                flatShading: true,
+            }),
+        );
+        core.position.set(0.2, 0.92, -0.05);
+        group.add(core);
+
+        const orbit = new THREE.Mesh(
+            new THREE.TorusGeometry(radius * 0.34, 0.011, 5, 44),
+            new THREE.MeshBasicMaterial({
+                color: '#88f7ff',
+                transparent: true,
+                opacity: 0.58,
+            }),
+        );
+        orbit.position.copy(core.position);
+        orbit.rotation.set(1.2, 0.45, 0.3);
+        group.add(orbit);
+
+        [core, orbit].forEach((object, index) =>
+            this.animatedFeatures.push({
+                object,
+                baseY: object.position.y,
+                phase: index * 1.2,
+                spin: index === 0 ? 0.35 : -0.22,
+                bob: 0.045,
+            }),
+        );
+
+        return group;
+    }
+
+    private createDuneNeedles(): THREE.Group {
+        const group = new THREE.Group();
+        const material = new THREE.MeshStandardMaterial({
+            color: '#d9a046',
+            roughness: 0.86,
+            flatShading: true,
+        });
+
+        for (let index = 0; index < 5; index += 1) {
+            const needle = new THREE.Mesh(
+                new THREE.ConeGeometry(0.05, 0.45 + index * 0.03, 4),
+                material,
+            );
+            needle.position.set(
+                Math.sin(index * 1.8) * 0.78,
+                0.56,
+                Math.cos(index * 1.4) * 0.54,
+            );
+            needle.rotation.y = index * 0.7;
+            group.add(needle);
+        }
+
+        return group;
+    }
+
+    private createMangroveRoots(): THREE.Group {
+        const group = new THREE.Group();
+        const material = new THREE.MeshStandardMaterial({
+            color: '#65412d',
+            roughness: 0.92,
+            flatShading: true,
+        });
+
+        for (let index = 0; index < 7; index += 1) {
+            const root = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.025, 0.04, 0.72, 5),
+                material,
+            );
+            root.position.set(
+                Math.sin(index * 1.1) * 0.54,
+                0.55,
+                Math.cos(index * 1.37) * 0.62,
+            );
+            root.rotation.set(0.45, index * 0.5, 0.22);
+            root.castShadow = true;
+            group.add(root);
+        }
+
+        return group;
+    }
+
+    private createLavenderWisps(radius: number): THREE.Group {
+        const group = new THREE.Group();
+        const material = new THREE.MeshBasicMaterial({
+            color: '#c9a2ff',
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false,
+        });
+
+        for (let index = 0; index < 8; index += 1) {
+            const wisp = new THREE.Mesh(
+                new THREE.SphereGeometry(0.035, 8, 6),
+                material,
+            );
+            const angle = index * 1.37;
+            wisp.position.set(
+                Math.cos(angle) * radius * 0.42,
+                0.78 + (index % 3) * 0.08,
+                Math.sin(angle) * radius * 0.42,
+            );
+            group.add(wisp);
+            this.animatedFeatures.push({
+                object: wisp,
+                baseY: wisp.position.y,
+                phase: index * 0.65,
+                spin: 0,
+                bob: 0.08,
+            });
+        }
+
+        return group;
+    }
+
+    private createFrostCrystals(): THREE.Group {
+        return this.createCrystalCluster([
+            [-0.65, 0.56, 0.25],
+            [0.24, 0.56, -0.52],
+            [0.58, 0.56, 0.12],
+        ]);
+    }
+
     private addAssetRole(
         group: THREE.Group,
         island: IslandConfig,
         role: IslandAssetRole,
         fallback?: THREE.Group,
     ): void {
+        if (!this.shouldUseDetailedAssets(island)) {
+            if (fallback) {
+                group.add(fallback);
+            }
+
+            return;
+        }
+
         const placements = island.assetPlacements?.filter(
             (placement) => placement.role === role,
         );
@@ -1034,6 +1343,12 @@ export class SalemScene implements SalemSceneHandle {
 
             assets.forEach((asset) => group.add(asset));
         });
+    }
+
+    private shouldUseDetailedAssets(island: IslandConfig): boolean {
+        return ['home', 'meadow', 'rocky', 'tropical', 'autumn'].includes(
+            island.id,
+        );
     }
 
     private async loadAssetPlacements(
@@ -1084,41 +1399,65 @@ export class SalemScene implements SalemSceneHandle {
 
     private createCabin(): THREE.Group {
         const group = new THREE.Group();
-        group.position.set(-0.85, 0.96, -0.85);
-        group.rotation.y = -0.35;
+        group.position.set(-0.95, 0.86, -0.92);
+        group.rotation.y = -0.42;
+
+        const wallMaterial = new THREE.MeshStandardMaterial({
+            color: '#9f663d',
+            roughness: 0.86,
+            flatShading: true,
+        });
+        const trimMaterial = new THREE.MeshStandardMaterial({
+            color: '#5a382b',
+            roughness: 0.84,
+            flatShading: true,
+        });
 
         const body = new THREE.Mesh(
-            new THREE.BoxGeometry(1.35, 1.05, 1.1),
-            new THREE.MeshStandardMaterial({
-                color: '#b77948',
-                roughness: 0.8,
-            }),
+            new THREE.BoxGeometry(1.1, 0.78, 0.92),
+            wallMaterial,
         );
         body.castShadow = true;
         body.receiveShadow = true;
         group.add(body);
 
-        const roof = new THREE.Mesh(
-            new THREE.ConeGeometry(1.08, 0.72, 4),
+        const sideShade = new THREE.Mesh(
+            new THREE.BoxGeometry(0.03, 0.76, 0.88),
             new THREE.MeshStandardMaterial({
-                color: '#563b46',
+                color: '#7c472f',
+                roughness: 0.88,
+                flatShading: true,
+            }),
+        );
+        sideShade.position.set(0.56, -0.01, -0.01);
+        group.add(sideShade);
+
+        const roof = new THREE.Mesh(
+            new THREE.ConeGeometry(0.86, 0.5, 4),
+            new THREE.MeshStandardMaterial({
+                color: '#57303b',
                 roughness: 0.72,
                 flatShading: true,
             }),
         );
-        roof.position.y = 0.82;
+        roof.position.y = 0.62;
         roof.rotation.y = Math.PI * 0.25;
         roof.castShadow = true;
         group.add(roof);
 
-        const door = new THREE.Mesh(
-            new THREE.BoxGeometry(0.34, 0.58, 0.04),
-            new THREE.MeshStandardMaterial({
-                color: '#4f332a',
-                roughness: 0.6,
-            }),
+        const porch = new THREE.Mesh(
+            new THREE.BoxGeometry(0.56, 0.07, 0.28),
+            trimMaterial,
         );
-        door.position.set(0, -0.2, 0.57);
+        porch.position.set(0, -0.43, 0.58);
+        porch.castShadow = true;
+        group.add(porch);
+
+        const door = new THREE.Mesh(
+            new THREE.BoxGeometry(0.28, 0.48, 0.04),
+            trimMaterial,
+        );
+        door.position.set(-0.1, -0.16, 0.48);
         group.add(door);
 
         const windowMaterial = new THREE.MeshStandardMaterial({
@@ -1128,10 +1467,10 @@ export class SalemScene implements SalemSceneHandle {
             roughness: 0.35,
         });
         const window = new THREE.Mesh(
-            new THREE.BoxGeometry(0.24, 0.24, 0.045),
+            new THREE.BoxGeometry(0.2, 0.2, 0.045),
             windowMaterial,
         );
-        window.position.set(0.42, 0.1, 0.57);
+        window.position.set(0.28, 0.04, 0.48);
         group.add(window);
 
         return group;
@@ -1139,35 +1478,42 @@ export class SalemScene implements SalemSceneHandle {
 
     private createChair(): THREE.Group {
         const group = new THREE.Group();
-        group.position.set(1.9, 0.82, 1.18);
+        group.position.set(1.72, 0.81, 1.34);
         group.rotation.y = -0.72;
 
         const wood = new THREE.MeshStandardMaterial({
-            color: '#7b563f',
-            roughness: 0.7,
+            color: '#79513a',
+            roughness: 0.78,
+            flatShading: true,
+        });
+        const cushion = new THREE.MeshStandardMaterial({
+            color: '#263446',
+            roughness: 0.64,
+            flatShading: true,
         });
         const seat = new THREE.Mesh(
-            new THREE.BoxGeometry(0.58, 0.12, 0.52),
-            wood,
+            new THREE.BoxGeometry(0.5, 0.1, 0.46),
+            cushion,
         );
         seat.castShadow = true;
         group.add(seat);
 
         const back = new THREE.Mesh(
-            new THREE.BoxGeometry(0.58, 0.68, 0.1),
+            new THREE.BoxGeometry(0.5, 0.5, 0.08),
             wood,
         );
-        back.position.set(0, 0.33, -0.25);
+        back.position.set(0, 0.26, -0.22);
+        back.rotation.x = -0.12;
         back.castShadow = true;
         group.add(back);
 
         for (const x of [-0.22, 0.22]) {
             for (const z of [-0.2, 0.2]) {
                 const leg = new THREE.Mesh(
-                    new THREE.BoxGeometry(0.08, 0.48, 0.08),
+                    new THREE.BoxGeometry(0.055, 0.34, 0.055),
                     wood,
                 );
-                leg.position.set(x, -0.28, z);
+                leg.position.set(x * 0.86, -0.22, z * 0.82);
                 leg.castShadow = true;
                 group.add(leg);
             }
@@ -1182,43 +1528,70 @@ export class SalemScene implements SalemSceneHandle {
         group.rotation.set(-0.08, -0.72, 0);
 
         const shell = new THREE.MeshStandardMaterial({
-            color: '#263446',
+            color: '#172033',
             metalness: 0.2,
             roughness: 0.45,
+            flatShading: true,
         });
         const base = new THREE.Mesh(
-            new THREE.BoxGeometry(0.62, 0.06, 0.42),
+            new THREE.BoxGeometry(0.56, 0.055, 0.38),
             shell,
         );
+        this.registerInteraction(base, {
+            action: 'program',
+            target: new THREE.Vector3(...programmingSpot.seat),
+            weather: 'night',
+        });
         group.add(base);
 
         this.laptopScreen = new THREE.MeshStandardMaterial({
-            color: '#10233d',
-            emissive: '#38bdf8',
-            emissiveIntensity: 0.6,
+            color: '#101827',
+            emissive: '#37d5ff',
+            emissiveIntensity: 0.72,
             roughness: 0.35,
         });
 
         const screen = new THREE.Mesh(
-            new THREE.BoxGeometry(0.62, 0.42, 0.05),
+            new THREE.BoxGeometry(0.56, 0.38, 0.045),
             this.laptopScreen,
         );
-        screen.position.set(0, 0.24, -0.18);
+        screen.position.set(0, 0.22, -0.16);
         screen.rotation.x = -0.34;
+        this.registerInteraction(screen, {
+            action: 'program',
+            target: new THREE.Vector3(...programmingSpot.seat),
+            weather: 'night',
+        });
         group.add(screen);
 
         const lineMaterial = new THREE.MeshBasicMaterial({ color: '#b8f7ff' });
 
         for (let index = 0; index < 5; index += 1) {
             const line = new THREE.Mesh(
-                new THREE.BoxGeometry(0.34 - index * 0.035, 0.014, 0.012),
+                new THREE.BoxGeometry(0.28 - index * 0.026, 0.012, 0.01),
                 lineMaterial.clone(),
             );
-            line.position.set(-0.05, 0.2 + index * 0.045, -0.214);
+            line.position.set(-0.04, 0.18 + index * 0.04, -0.194);
             line.rotation.x = -0.34;
             this.laptopCodeLines.push(line);
             group.add(line);
         }
+
+        const target = new THREE.Mesh(
+            new THREE.BoxGeometry(1.35, 1.05, 1.05),
+            new THREE.MeshBasicMaterial({
+                transparent: true,
+                opacity: 0,
+                depthWrite: false,
+            }),
+        );
+        target.position.set(0, 0.22, -0.02);
+        this.registerInteraction(target, {
+            action: 'program',
+            target: new THREE.Vector3(...programmingSpot.seat),
+            weather: 'night',
+        });
+        group.add(target);
 
         return group;
     }
@@ -1226,11 +1599,18 @@ export class SalemScene implements SalemSceneHandle {
     private createTrees(biome: IslandBiome): THREE.Group {
         const group = new THREE.Group();
         const leafColors: Record<IslandBiome, string[]> = {
+            autumn: ['#b95d45', '#d8a44e'],
+            crystal: ['#69e9ff', '#a78bfa'],
+            desert: ['#c08337', '#e0b45e'],
             home: ['#2f7d54', '#68a85a'],
+            lavender: ['#7e8f5a', '#a98bdd'],
+            lunar: ['#8790a3', '#c7ccd9'],
+            mangrove: ['#236b54', '#4b9b66'],
             meadow: ['#3f9a55', '#88c95f'],
+            nebula: ['#5f7cff', '#d66bf0'],
             rocky: ['#718078', '#a1aa91'],
             tropical: ['#1d9073', '#54c28b'],
-            autumn: ['#b95d45', '#d8a44e'],
+            tundra: ['#7aa294', '#d9f6ee'],
         };
         const positions = [
             [-2.15, 0.9, -0.1],
@@ -1541,102 +1921,92 @@ export class SalemScene implements SalemSceneHandle {
     }
 
     private createSalemFallback(): void {
-        const material = new THREE.MeshStandardMaterial({
-            color: '#1f2027',
+        this.fallbackSalem.scale.setScalar(1.12);
+
+        const fur = new THREE.MeshStandardMaterial({
+            color: '#171920',
             roughness: 0.62,
+            flatShading: true,
+        });
+        const belly = new THREE.MeshStandardMaterial({
+            color: '#252a34',
+            roughness: 0.68,
+            flatShading: true,
         });
         const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#a7f3d0' });
-        const body = new THREE.Mesh(
-            new THREE.SphereGeometry(0.32, 14, 10),
-            material,
-        );
-        body.scale.set(1.2, 0.72, 0.72);
-        body.position.y = 0.12;
+        const body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8), fur);
+        body.scale.set(1.26, 0.72, 0.78);
+        body.position.y = 0.14;
         body.castShadow = true;
-        this.catAnchor.add(body);
+        this.salemBody = body;
+        this.fallbackSalem.add(body);
 
-        const head = new THREE.Mesh(
-            new THREE.SphereGeometry(0.2, 12, 8),
-            material,
+        const chest = new THREE.Mesh(
+            new THREE.SphereGeometry(0.18, 10, 7),
+            belly,
         );
-        head.position.set(0.32, 0.23, 0);
-        head.castShadow = true;
-        this.catAnchor.add(head);
+        chest.scale.set(0.6, 0.3, 0.8);
+        chest.position.set(0.2, 0.11, 0);
+        this.fallbackSalem.add(chest);
 
-        for (const z of [-0.09, 0.09]) {
+        const headGroup = new THREE.Group();
+        headGroup.position.set(0.33, 0.29, 0);
+        this.salemHead = headGroup;
+        this.fallbackSalem.add(headGroup);
+
+        const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8), fur);
+        head.castShadow = true;
+        headGroup.add(head);
+
+        for (const z of [-0.085, 0.085]) {
             const eye = new THREE.Mesh(
-                new THREE.SphereGeometry(0.025, 8, 6),
+                new THREE.SphereGeometry(0.032, 8, 6),
                 eyeMaterial,
             );
-            eye.position.set(0.48, 0.27, z);
-            this.catAnchor.add(eye);
+            eye.position.set(0.17, 0.035, z);
+            this.salemEyes.push(eye);
+            headGroup.add(eye);
         }
 
         for (const z of [-0.11, 0.11]) {
             const ear = new THREE.Mesh(
-                new THREE.ConeGeometry(0.075, 0.18, 3),
-                material,
+                new THREE.ConeGeometry(0.085, 0.2, 3),
+                fur,
             );
-            ear.position.set(0.27, 0.43, z);
-            ear.rotation.z = -0.18;
-            this.catAnchor.add(ear);
+            ear.position.set(-0.01, 0.21, z);
+            ear.rotation.set(0, 0.18, z > 0 ? -0.22 : 0.22);
+            headGroup.add(ear);
         }
 
-        const tail = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.04, 0.035, 0.62, 6),
-            material,
-        );
-        tail.position.set(-0.42, 0.22, 0);
-        tail.rotation.z = 1.05;
-        tail.castShadow = true;
-        this.catAnchor.add(tail);
-    }
-
-    private loadSalemAsset(): void {
-        void this.assetLoader
-            .load('salem')
-            .then((gltf) => {
-                const model = gltf.scene;
-                model.scale.setScalar(0.0047);
-                model.rotation.y = Math.PI * 0.5;
-                this.assetLoader.configureShadows(model);
-                this.assetLoader.applyMaterialTheme('salem', model);
-
-                this.catAnchor.clear();
-                this.catAnchor.add(model);
-                this.catAnchor.add(this.createSalemFaceAccent());
-                this.catAnchor.add(this.programmingPaws);
-
-                this.salemMixer = new THREE.AnimationMixer(model);
-                gltf.animations.forEach((clip) => {
-                    this.salemActions.set(
-                        clip.name,
-                        this.salemMixer!.clipAction(clip),
-                    );
-                });
-                this.playSalemAnimation('Idle');
-            })
-            .catch(() => {
-                this.options.onAssetError(
-                    'Salem model could not load, using fallback cat.',
-                );
-            });
-    }
-
-    private createSalemFaceAccent(): THREE.Group {
-        const group = new THREE.Group();
-        const eyeMaterial = new THREE.MeshBasicMaterial({ color: '#9ff6cf' });
-
-        for (const z of [-0.085, 0.085]) {
-            const eye = new THREE.Mesh(
-                new THREE.SphereGeometry(0.022, 8, 6),
-                eyeMaterial,
+        for (const z of [-0.16, 0.16]) {
+            const paw = new THREE.Mesh(
+                new THREE.SphereGeometry(0.07, 8, 5),
+                fur,
             );
-            eye.position.set(0.36, 0.25, z);
-            group.add(eye);
+            paw.scale.set(1.25, 0.5, 0.7);
+            paw.position.set(0.22, -0.12, z);
+            paw.castShadow = true;
+            this.fallbackSalem.add(paw);
         }
 
-        return group;
+        const tailGroup = new THREE.Group();
+        tailGroup.position.set(-0.42, 0.21, 0);
+        tailGroup.rotation.z = 1.05;
+        this.salemTail = tailGroup;
+        this.fallbackSalem.add(tailGroup);
+
+        for (let index = 0; index < 3; index += 1) {
+            const segment = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.038, 0.042, 0.24, 6),
+                fur,
+            );
+            segment.position.y = index * 0.16;
+            segment.rotation.z = -0.18 + index * 0.1;
+            segment.castShadow = true;
+            tailGroup.add(segment);
+        }
+
+        this.catAnchor.add(this.fallbackSalem);
     }
 
     private createProgrammingPaws(): void {
@@ -1678,7 +2048,7 @@ export class SalemScene implements SalemSceneHandle {
         const width = this.container.clientWidth;
         const height = this.container.clientHeight;
         const aspect = width / Math.max(height, 1);
-        const frustum = width < 720 ? 7.5 : 6.65;
+        const frustum = width < 720 ? 8.4 : 7.85;
 
         this.camera.left = (-frustum * aspect) / 2;
         this.camera.right = (frustum * aspect) / 2;
@@ -1691,7 +2061,13 @@ export class SalemScene implements SalemSceneHandle {
     };
 
     private readonly onPointerDown = (event: PointerEvent): void => {
-        this.pointerStart = { x: event.clientX, rotation: this.rootRotation };
+        this.pointerStart = {
+            x: event.clientX,
+            y: event.clientY,
+            rotation: this.rootRotation,
+            dragging: false,
+        };
+        this.renderer.domElement.style.cursor = 'grabbing';
         this.renderer.domElement.setPointerCapture(event.pointerId);
     };
 
@@ -1700,35 +2076,169 @@ export class SalemScene implements SalemSceneHandle {
             return;
         }
 
-        const delta = (event.clientX - this.pointerStart.x) / 420;
-        this.rootRotation = THREE.MathUtils.clamp(
-            this.pointerStart.rotation + delta,
-            -0.78,
-            0.55,
+        const movement = Math.hypot(
+            event.clientX - this.pointerStart.x,
+            event.clientY - this.pointerStart.y,
         );
+        this.pointerStart.dragging ||= movement > 5;
+
+        const delta = (event.clientX - this.pointerStart.x) / 420;
+        this.rootRotation = this.pointerStart.rotation + delta;
     };
 
-    private readonly onPointerUp = (): void => {
+    private readonly onPointerUp = (event: PointerEvent): void => {
+        if (this.pointerStart && !this.pointerStart.dragging) {
+            this.handleWorldClick(event);
+        }
+
+        if (this.renderer.domElement.hasPointerCapture(event.pointerId)) {
+            this.renderer.domElement.releasePointerCapture(event.pointerId);
+        }
+
         this.pointerStart = null;
+        this.renderer.domElement.style.cursor = 'grab';
     };
+
+    private handleWorldClick(event: PointerEvent): void {
+        const rect = this.renderer.domElement.getBoundingClientRect();
+        this.pointer.set(
+            ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            -((event.clientY - rect.top) / rect.height) * 2 + 1,
+        );
+        this.raycaster.setFromCamera(this.pointer, this.camera);
+
+        const hits = this.raycaster.intersectObjects(
+            [...this.interactionTargets.keys()],
+            true,
+        );
+        const hit = hits.find((item) =>
+            this.findInteractionTarget(item.object),
+        );
+
+        if (!hit) {
+            return;
+        }
+
+        const target = this.findInteractionTarget(hit.object);
+
+        if (!target) {
+            return;
+        }
+
+        if (target.weather) {
+            this.setWeather(target.weather);
+            this.options.onWeatherChange(target.weather);
+        }
+
+        if (target.action === 'program') {
+            this.startProgramming();
+
+            return;
+        }
+
+        if (target.action === 'inspect') {
+            this.forceAction('inspect');
+            this.manualMoveTarget = target.target;
+            this.options.onActionRequest('inspect');
+
+            return;
+        }
+
+        const destination = (
+            target.target ?? this.root.worldToLocal(hit.point.clone())
+        ).clone();
+
+        if (this.isNearProgrammingArea(destination)) {
+            this.startProgramming();
+
+            return;
+        }
+
+        destination.y += 0.02;
+        this.moveSalemTo(destination);
+        this.options.onActionRequest('walk');
+    }
+
+    private startProgramming(): void {
+        this.forceAction('program');
+        this.options.onActionRequest('program');
+    }
+
+    private isNearProgrammingArea(point: THREE.Vector3): boolean {
+        const laptop = new THREE.Vector3(...programmingSpot.laptop);
+        const seat = new THREE.Vector3(...programmingSpot.seat);
+
+        return point.distanceTo(laptop) < 1.15 || point.distanceTo(seat) < 1.05;
+    }
+
+    private moveSalemTo(target: THREE.Vector3): void {
+        this.manualMoveTarget = target.clone();
+        const delta = target.clone().sub(this.catAnchor.position);
+
+        if (delta.lengthSq() > 0.001) {
+            this.desiredFacing = Math.atan2(delta.x, delta.z) - Math.PI * 0.5;
+        }
+
+        this.currentAction = 'walk';
+        this.actionStartedAt = performance.now();
+        this.options.onActionChange('walk');
+    }
+
+    private registerInteraction(
+        object: THREE.Object3D,
+        target: InteractionTarget,
+    ): void {
+        this.interactionTargets.set(object, target);
+    }
+
+    private findInteractionTarget(
+        object: THREE.Object3D,
+    ): InteractionTarget | undefined {
+        let current: THREE.Object3D | null = object;
+
+        while (current) {
+            const target = this.interactionTargets.get(current);
+
+            if (target) {
+                return target;
+            }
+
+            current = current.parent;
+        }
+
+        return undefined;
+    }
 
     private readonly onWheel = (event: WheelEvent): void => {
         event.preventDefault();
         const zoom = THREE.MathUtils.clamp(
-            this.camera.zoom + (event.deltaY > 0 ? -0.08 : 0.08),
-            0.82,
-            1.35,
+            this.camera.zoom + (event.deltaY > 0 ? -0.07 : 0.07),
+            0.64,
+            1.24,
         );
         this.camera.zoom = zoom;
         this.camera.updateProjectionMatrix();
     };
 
     private animate = (): void => {
-        const delta = this.clock.getDelta();
-        const elapsed = this.clock.elapsedTime;
+        const now = performance.now();
+
+        if (now - this.lastRenderAt < 1000 / 45) {
+            this.animationFrame = requestAnimationFrame(this.animate);
+
+            return;
+        }
+
+        this.lastRenderAt = now;
+        const delta = Math.min((now - this.lastTickAt) / 1000, 0.05);
+        this.lastTickAt = now;
+        this.elapsedSeconds += delta;
+        const elapsed = this.elapsedSeconds;
 
         if (!document.hidden) {
             this.updateRoot(delta);
+            this.updateFloatingIslands(elapsed);
+            this.updateAnimatedFeatures(elapsed, delta);
             this.updateWaterfalls(elapsed);
             this.updateWeatherParticles(elapsed);
             this.updateSalem(delta, elapsed);
@@ -1745,6 +2255,24 @@ export class SalemScene implements SalemSceneHandle {
             5,
             delta,
         );
+    }
+
+    private updateFloatingIslands(elapsed: number): void {
+        this.floatingIslands.forEach((island) => {
+            island.group.position.y =
+                island.baseY +
+                Math.sin(elapsed * island.speed + island.phase) *
+                    island.amplitude;
+        });
+    }
+
+    private updateAnimatedFeatures(elapsed: number, delta: number): void {
+        this.animatedFeatures.forEach((feature) => {
+            feature.object.position.y =
+                feature.baseY +
+                Math.sin(elapsed * 1.8 + feature.phase) * feature.bob;
+            feature.object.rotation.y += feature.spin * delta;
+        });
     }
 
     private updateWaterfalls(elapsed: number): void {
@@ -1815,11 +2343,21 @@ export class SalemScene implements SalemSceneHandle {
             7,
             delta,
         );
-        this.updateSalemAnimation(this.currentAction, step.phase);
-        this.salemMixer?.update(delta);
+        this.updateSalemRig(this.currentAction, step.phase, elapsed, delta);
         this.programmingPaws.visible =
             this.currentAction === 'program' && step.phase === 'acting';
         this.updateLaptop(elapsed);
+
+        if (
+            this.currentAction === 'walk' &&
+            this.manualMoveTarget &&
+            this.catAnchor.position.distanceTo(this.manualMoveTarget) < 0.08
+        ) {
+            this.manualMoveTarget = undefined;
+            this.forceAction('idle');
+
+            return;
+        }
 
         if (
             elapsedMs > actionDuration(this.currentAction) &&
@@ -1853,6 +2391,14 @@ export class SalemScene implements SalemSceneHandle {
         }
 
         if (action === 'walk') {
+            if (this.manualMoveTarget) {
+                return [
+                    this.manualMoveTarget.x,
+                    this.manualMoveTarget.y,
+                    this.manualMoveTarget.z,
+                ];
+            }
+
             return [
                 Math.sin(elapsed * 0.45) * 1.25,
                 0.7,
@@ -1876,6 +2422,10 @@ export class SalemScene implements SalemSceneHandle {
             return 0.2;
         }
 
+        if (action === 'walk') {
+            return this.desiredFacing;
+        }
+
         return -0.55;
     }
 
@@ -1885,59 +2435,80 @@ export class SalemScene implements SalemSceneHandle {
         elapsed: number,
     ): number {
         if (action === 'sleep') {
-            return 0.56;
+            return 0.82;
         }
 
         if (action === 'sit' || (action === 'program' && phase !== 'moving')) {
-            return 0.72;
+            return 0.92;
         }
 
         return 1 + Math.sin(elapsed * 2.8) * 0.025;
     }
 
-    private updateSalemAnimation(action: SalemAction, phase: string): void {
-        if (phase === 'moving' || action === 'walk') {
-            this.playSalemAnimation('Walk');
+    private updateSalemRig(
+        action: SalemAction,
+        phase: string,
+        elapsed: number,
+        delta: number,
+    ): void {
+        const moving = phase === 'moving' || action === 'walk';
+        const programming = action === 'program' && phase === 'acting';
+        const sleeping = action === 'sleep' && phase !== 'moving';
+        const pulse = Math.sin(elapsed * (moving ? 10 : 2.4));
 
-            return;
+        if (this.salemBody) {
+            this.salemBody.position.y = THREE.MathUtils.damp(
+                this.salemBody.position.y,
+                0.14 + (moving ? Math.abs(pulse) * 0.035 : 0),
+                9,
+                delta,
+            );
+            this.salemBody.rotation.z = THREE.MathUtils.damp(
+                this.salemBody.rotation.z,
+                sleeping ? 0.5 : moving ? pulse * 0.055 : 0,
+                8,
+                delta,
+            );
         }
 
-        if (action === 'inspect') {
-            this.playSalemAnimation('Yes');
-
-            return;
+        if (this.salemHead) {
+            this.salemHead.rotation.y = THREE.MathUtils.damp(
+                this.salemHead.rotation.y,
+                programming ? -0.28 : moving ? pulse * 0.05 : 0.08,
+                7,
+                delta,
+            );
+            this.salemHead.rotation.z = THREE.MathUtils.damp(
+                this.salemHead.rotation.z,
+                sleeping
+                    ? 0.48
+                    : programming
+                      ? -0.12
+                      : Math.sin(elapsed) * 0.04,
+                7,
+                delta,
+            );
         }
 
-        this.playSalemAnimation('Idle');
-    }
-
-    private playSalemAnimation(name: string): void {
-        const animationName = this.resolveSalemAnimationName(name);
-
-        if (!animationName || animationName === this.activeSalemAnimationName) {
-            return;
+        if (this.salemTail) {
+            this.salemTail.rotation.z = THREE.MathUtils.damp(
+                this.salemTail.rotation.z,
+                sleeping ? 0.45 : 1.05 + Math.sin(elapsed * 3.2) * 0.22,
+                6,
+                delta,
+            );
+            this.salemTail.rotation.y = THREE.MathUtils.damp(
+                this.salemTail.rotation.y,
+                moving ? Math.sin(elapsed * 7.5) * 0.24 : 0,
+                8,
+                delta,
+            );
         }
 
-        const nextAction = this.salemActions.get(animationName);
-
-        if (!nextAction) {
-            return;
-        }
-
-        nextAction.reset().fadeIn(0.2).play();
-        this.activeSalemAnimation?.fadeOut(0.2);
-        this.activeSalemAnimation = nextAction;
-        this.activeSalemAnimationName = animationName;
-    }
-
-    private resolveSalemAnimationName(name: string): string | undefined {
-        if (this.salemActions.has(name)) {
-            return name;
-        }
-
-        return [...this.salemActions.keys()].find((animationName) =>
-            animationName.endsWith(`|${name}`),
-        );
+        const blink = Math.sin(elapsed * 1.7) > 0.985 ? 0.08 : 1;
+        this.salemEyes.forEach((eye) => {
+            eye.scale.y = THREE.MathUtils.damp(eye.scale.y, blink, 20, delta);
+        });
     }
 
     private updateLaptop(elapsed: number): void {
