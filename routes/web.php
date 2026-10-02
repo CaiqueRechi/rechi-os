@@ -11,19 +11,27 @@ use App\Http\Controllers\Dashboard\TerrariaDashboardController;
 use App\Http\Controllers\PortfolioController;
 use App\Http\Controllers\SalemActionController;
 use App\Http\Controllers\SalemController;
+use App\Http\Controllers\SalemMarketController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', PortfolioController::class)->name('home');
 Route::post('/contact', [ContactController::class, 'store'])->middleware('throttle:contact')->name('contact.store');
 Route::post('/ask-rechi', AssistantController::class)->middleware('throttle:assistant')->name('assistant.ask');
-Route::get('/salem', SalemController::class)->name('salem.index');
-Route::post('/salem/actions', SalemActionController::class)->middleware('throttle:salem-actions')->name('salem.actions.store');
-
 Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/salem', SalemController::class)
+        ->middleware('screen.access:salem,read')
+        ->name('salem.index');
+    Route::post('/salem/actions', SalemActionController::class)
+        ->middleware(['screen.access:salem,write', 'throttle:salem-actions'])
+        ->name('salem.actions.store');
+    Route::post('/salem/market', SalemMarketController::class)
+        ->middleware(['screen.access:salem,write', 'throttle:salem-actions'])
+        ->name('salem.market.store');
+
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
     Route::get('admin', AdminController::class)->middleware('can:managePortfolio')->name('admin.dashboard');
     Route::get('dashboard/biblioteca', GameLibraryDashboardController::class)
-        ->middleware('can:managePortfolio')->name('dashboard.library');
+        ->middleware('screen.access:library,read')->name('dashboard.library');
     Route::get('dashboard/biblioteca/terraria', TerrariaDashboardController::class)
         ->middleware('can:managePortfolio')->name('dashboard.library.terraria');
     Route::get('dashboard/biblioteca/terraria/planner', GamePlannerDashboardController::class)

@@ -1,18 +1,16 @@
 import { Head, Link } from '@inertiajs/react';
-import { ArrowRight, Gamepad2, Library } from 'lucide-react';
+import { ArrowRight, Cat, Gamepad2, Library, MoonStar } from 'lucide-react';
 
-const games = [
-    {
-        name: 'Terraria',
-        description:
-            'Consulte itens e explore builds de progressão para todas as classes e subclasses.',
-        href: '/dashboard/biblioteca/terraria',
-        logo: '/images/games/terraria-logo.png',
-        details: 'Vanilla + Calamity Mod',
-    },
-];
+type Game = {
+    name: string;
+    description: string;
+    href: string;
+    logo: string | null;
+    details: string;
+    theme: 'terraria' | 'salem';
+};
 
-export default function GameLibraryIndex() {
+export default function GameLibraryIndex({ games }: { games: Game[] }) {
     return (
         <>
             <Head title="Biblioteca" />
@@ -46,13 +44,31 @@ export default function GameLibraryIndex() {
                                 prefetch
                                 className="group overflow-hidden rounded-xl border border-border bg-card shadow-sm transition duration-200 hover:-translate-y-1 hover:border-primary/60 hover:shadow-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                             >
-                                <div className="relative grid min-h-52 place-items-center overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(74,222,128,0.3),transparent_48%),linear-gradient(180deg,#172b24_0%,#111827_58%,#0b1020_100%)] p-8">
+                                <div
+                                    className={
+                                        game.theme === 'salem'
+                                            ? 'relative grid min-h-52 place-items-center overflow-hidden bg-[radial-gradient(circle_at_24%_18%,rgba(254,240,138,0.4),transparent_22%),radial-gradient(circle_at_70%_30%,rgba(125,211,252,0.3),transparent_38%),linear-gradient(180deg,#7c9bb7_0%,#4d6f8e_55%,#28384d_100%)] p-8'
+                                            : 'relative grid min-h-52 place-items-center overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(74,222,128,0.3),transparent_48%),linear-gradient(180deg,#172b24_0%,#111827_58%,#0b1020_100%)] p-8'
+                                    }
+                                >
                                     <div className="absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(180deg,transparent,rgba(0,0,0,0.28))]" />
-                                    <img
-                                        src={game.logo}
-                                        alt={`Logo de ${game.name}`}
-                                        className="relative max-h-28 w-full max-w-80 object-contain drop-shadow-[0_8px_12px_rgba(0,0,0,0.55)] transition duration-200 group-hover:scale-105"
-                                    />
+                                    {game.logo ? (
+                                        <img
+                                            src={game.logo}
+                                            alt={`Logo de ${game.name}`}
+                                            className="relative max-h-28 w-full max-w-80 object-contain drop-shadow-[0_8px_12px_rgba(0,0,0,0.55)] transition duration-200 group-hover:scale-105"
+                                        />
+                                    ) : (
+                                        <div className="relative flex flex-col items-center text-slate-950 drop-shadow-[0_8px_12px_rgba(255,255,255,0.18)] transition duration-200 group-hover:scale-105">
+                                            <div className="relative grid size-24 place-items-center rounded-[2rem] border border-white/50 bg-white/30 shadow-xl backdrop-blur-sm">
+                                                <Cat className="size-14" />
+                                                <MoonStar className="absolute -top-3 -right-4 size-9 text-amber-200" />
+                                            </div>
+                                            <span className="mt-4 text-3xl font-black tracking-[0.18em] text-white uppercase">
+                                                Salém
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex items-end justify-between gap-4 p-5">

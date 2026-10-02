@@ -13,6 +13,11 @@ export type User = {
 
 export type Auth = {
     user: User;
+    screen_access?: {
+        library?: 'none' | 'read' | 'write';
+        salem?: 'none' | 'read' | 'write';
+        can_open_library?: boolean;
+    };
 };
 
 export type Passkey = {

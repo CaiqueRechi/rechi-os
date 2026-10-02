@@ -18,7 +18,7 @@ export default function Dashboard() {
     const firstName = auth.user.name.trim().split(/\s+/)[0];
 
     const quickLinks = [
-        ...(auth.user.is_admin
+        ...(auth.screen_access?.can_open_library
             ? [
                   {
                       title: 'Biblioteca',

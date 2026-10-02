@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use App\Enums\ScreenAccessLevel;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -49,5 +52,41 @@ class User extends Authenticatable implements PasskeyUser
             'is_admin' => 'boolean',
             'two_factor_confirmed_at' => 'datetime',
         ];
+    }
+
+    /** @return HasMany<ScreenAccessPermission, $this> */
+    public function screenAccessPermissions(): HasMany
+    {
+        return $this->hasMany(ScreenAccessPermission::class);
+    }
+
+    /** @return HasOne<SalemPlayer, $this> */
+    public function salemPlayer(): HasOne
+    {
+        return $this->hasOne(SalemPlayer::class);
+    }
+
+    public function screenAccessLevel(string $screenKey): ScreenAccessLevel
+    {
+        $permission = $this->screenAccessPermissions()
+            ->where('screen_key', $screenKey)
+            ->first();
+
+        if (! $permission) {
+            return ScreenAccessLevel::None;
+        }
+
+        $level = $permission->getAttribute('access_level');
+
+        if ($level instanceof ScreenAccessLevel) {
+            return $level;
+        }
+
+        return ScreenAccessLevel::tryFrom((string) $level) ?? ScreenAccessLevel::None;
+    }
+
+    public function hasScreenAccess(string $screenKey, ScreenAccessLevel $required): bool
+    {
+        return $this->screenAccessLevel($screenKey)->allows($required);
     }
 }
