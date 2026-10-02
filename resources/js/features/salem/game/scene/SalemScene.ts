@@ -567,12 +567,11 @@ export class SalemScene implements SalemSceneHandle {
         const grass = new THREE.InstancedMesh(
             new THREE.ConeGeometry(0.035, 0.18, 4),
             new THREE.MeshStandardMaterial({
-                color: '#ffffff',
+                color: colors.grass,
                 roughness: 0.7,
                 flatShading: true,
-                vertexColors: true,
-                emissive: '#173c26',
-                emissiveIntensity: 0.1,
+                emissive: colors.grass,
+                emissiveIntensity: 0.06,
             }),
             count,
         );
@@ -601,14 +600,6 @@ export class SalemScene implements SalemSceneHandle {
             );
             matrix.compose(position, quaternion, size);
             grass.setMatrixAt(index, matrix);
-            grass.setColorAt(
-                index,
-                this.variedColor(colors.grass, colors.grassAccent, index, 4.8),
-            );
-        }
-
-        if (grass.instanceColor) {
-            grass.instanceColor.needsUpdate = true;
         }
 
         grass.receiveShadow = true;
@@ -626,10 +617,9 @@ export class SalemScene implements SalemSceneHandle {
         const pebbles = new THREE.InstancedMesh(
             new THREE.DodecahedronGeometry(0.065, 0),
             new THREE.MeshStandardMaterial({
-                color: '#ffffff',
+                color: colors.stone,
                 roughness: 0.8,
                 flatShading: true,
-                vertexColors: true,
             }),
             count,
         );
@@ -658,14 +648,6 @@ export class SalemScene implements SalemSceneHandle {
             );
             matrix.compose(position, quaternion, size);
             pebbles.setMatrixAt(index, matrix);
-            pebbles.setColorAt(
-                index,
-                this.variedColor(colors.stone, colors.stoneAccent, index, 1.8),
-            );
-        }
-
-        if (pebbles.instanceColor) {
-            pebbles.instanceColor.needsUpdate = true;
         }
 
         pebbles.castShadow = true;
@@ -696,10 +678,11 @@ export class SalemScene implements SalemSceneHandle {
         const canopies = new THREE.InstancedMesh(
             new THREE.DodecahedronGeometry(0.2, 1),
             new THREE.MeshStandardMaterial({
-                color: '#ffffff',
+                color: colors.tree,
                 roughness: 0.72,
                 flatShading: true,
-                vertexColors: true,
+                emissive: colors.tree,
+                emissiveIntensity: 0.06,
             }),
             count,
         );
@@ -733,14 +716,6 @@ export class SalemScene implements SalemSceneHandle {
             );
             matrix.compose(position, quaternion, size);
             canopies.setMatrixAt(index, matrix);
-            canopies.setColorAt(
-                index,
-                this.variedColor(colors.tree, colors.treeAccent, index, 7.1),
-            );
-        }
-
-        if (canopies.instanceColor) {
-            canopies.instanceColor.needsUpdate = true;
         }
 
         trunks.castShadow = true;
@@ -964,18 +939,6 @@ export class SalemScene implements SalemSceneHandle {
 
     private randomSigned(index: number, seed: number): number {
         return this.random(index, seed) * 2 - 1;
-    }
-
-    private variedColor(
-        base: string,
-        accent: string,
-        index: number,
-        seed: number,
-    ): THREE.Color {
-        return new THREE.Color(base).lerp(
-            new THREE.Color(accent),
-            0.08 + this.random(index, seed) * 0.16,
-        );
     }
 
     private seedFromString(value: string): number {
