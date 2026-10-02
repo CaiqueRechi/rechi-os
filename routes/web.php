@@ -11,6 +11,7 @@ use App\Http\Controllers\Dashboard\TerrariaDashboardController;
 use App\Http\Controllers\PortfolioController;
 use App\Http\Controllers\SalemActionController;
 use App\Http\Controllers\SalemController;
+use App\Http\Controllers\SalemGameController;
 use App\Http\Controllers\SalemMarketController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,6 +22,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/salem', SalemController::class)
         ->middleware('screen.access:salem,read')
         ->name('salem.index');
+    Route::get('/salem/jogar', SalemGameController::class)
+        ->middleware('screen.access:salem,read')
+        ->name('salem.game');
     Route::post('/salem/actions', SalemActionController::class)
         ->middleware(['screen.access:salem,write', 'throttle:salem-actions'])
         ->name('salem.actions.store');
