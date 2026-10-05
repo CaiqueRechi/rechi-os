@@ -5,6 +5,7 @@ export type User = {
     avatar?: string;
     email_verified_at: string | null;
     two_factor_enabled?: boolean;
+    is_admin?: boolean;
     created_at: string;
     updated_at: string;
     [key: string]: unknown;
@@ -12,6 +13,11 @@ export type User = {
 
 export type Auth = {
     user: User;
+    screen_access?: {
+        library?: 'none' | 'read' | 'write';
+        salem?: 'none' | 'read' | 'write';
+        can_open_library?: boolean;
+    };
 };
 
 export type Passkey = {

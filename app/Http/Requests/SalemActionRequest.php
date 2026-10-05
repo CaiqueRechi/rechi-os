@@ -23,7 +23,6 @@ class SalemActionRequest extends FormRequest
                 'sleep',
                 'inspect',
                 'program',
-                'dev_cozy_points',
             ])],
         ];
     }

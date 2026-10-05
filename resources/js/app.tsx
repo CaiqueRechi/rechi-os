@@ -9,7 +9,6 @@ import AppLayout from '@/layouts/app-layout';
 import AuthLayout from '@/layouts/auth-layout';
 import SettingsLayout from '@/layouts/settings/layout';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 const pages = import.meta.glob<{ default: ResolvedComponent }>(
     './pages/**/*.tsx',
 );
@@ -24,12 +23,12 @@ createInertiaApp({
 
         return (await page()).default;
     },
-    title: (title) => (title ? `${title} - ${appName}` : appName),
+    title: () => 'Rechi',
     layout: (name) => {
         switch (true) {
             case name === 'welcome':
                 return null;
-            case name.startsWith('salem/'):
+            case name === 'salem/game':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

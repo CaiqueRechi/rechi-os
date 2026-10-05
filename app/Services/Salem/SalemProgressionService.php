@@ -17,7 +17,6 @@ class SalemProgressionService
         'sleep' => ['reward' => 3, 'cooldown' => 30],
         'inspect' => ['reward' => 7, 'cooldown' => 25],
         'program' => ['reward' => 18, 'cooldown' => 60],
-        'dev_cozy_points' => ['reward' => 25, 'cooldown' => 5],
     ];
 
     public function resolveSave(SalemPlayer $player): SalemGameSave
@@ -63,7 +62,7 @@ class SalemProgressionService
             'xp' => $save->xp + $reward,
             'cozy_points' => $save->cozy_points + $reward,
             'level' => intdiv($save->xp + $reward, 100) + 1,
-            'pet_state' => $action === 'dev_cozy_points' ? $save->pet_state : $action,
+            'pet_state' => $action,
             'state_payload' => $payload,
             'last_progress_at' => $now,
         ])->save();

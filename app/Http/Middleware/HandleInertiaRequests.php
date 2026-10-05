@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Enums\ScreenAccessLevel;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -35,11 +36,18 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
+                'screen_access' => $user ? [
+                    'library' => $user->screenAccessLevel('library')->value,
+                    'salem' => $user->screenAccessLevel('salem')->value,
+                    'can_open_library' => $user->hasScreenAccess('library', ScreenAccessLevel::Read),
+                ] : [],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\ScreenAccessLevel;
+use App\Models\ScreenAccessPermission;
 use App\Models\User;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -39,12 +41,24 @@ class CreateAdminUser extends Command
             return self::FAILURE;
         }
 
-        User::create([
+        $user = User::create([
             'name' => $name,
             'email' => $email,
             'password' => $password,
             'is_admin' => true,
         ]);
+
+        $user->forceFill([
+            'email_verified_at' => now(),
+        ])->save();
+
+        foreach (['library', 'salem'] as $screenKey) {
+            ScreenAccessPermission::query()->create([
+                'user_id' => $user->id,
+                'screen_key' => $screenKey,
+                'access_level' => ScreenAccessLevel::Write,
+            ]);
+        }
 
         $this->info('Admin user created.');
 
