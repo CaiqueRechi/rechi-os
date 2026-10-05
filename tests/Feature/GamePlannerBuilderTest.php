@@ -117,6 +117,7 @@ class GamePlannerBuilderTest extends TestCase
         $planner = app(GamePlannerService::class)->planner('melee-generated');
         $kingSlimeStep = collect($planner['timeline'] ?? [])->firstWhere('milestone_name', 'King Slime');
         $this->assertSame('King Slime', $kingSlimeStep['target']['npc_name'] ?? null);
+        $this->assertSame('https://terraria.wiki.gg/wiki/Special:Redirect/file/King_Slime.png', $kingSlimeStep['target']['image_url'] ?? null);
         $this->assertSame(10, (int) ($kingSlimeStep['target']['stats']['defense'] ?? 0));
     }
 

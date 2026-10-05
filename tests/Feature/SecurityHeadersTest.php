@@ -22,6 +22,7 @@ class SecurityHeadersTest extends TestCase
             $policy = $response->headers->get('Content-Security-Policy');
 
             $this->assertStringContainsString("script-src 'self' 'unsafe-inline' http://127.0.0.1:5173", $policy);
+            $this->assertStringContainsString('img-src \'self\' data: blob: https://terraria.wiki.gg https://calamitymod.wiki.gg', $policy);
             $this->assertStringContainsString("connect-src 'self' http://127.0.0.1:5173 ws://127.0.0.1:5173", $policy);
             $this->assertStringContainsString("font-src 'self' data: http://127.0.0.1:5173", $policy);
         } finally {
@@ -42,6 +43,7 @@ class SecurityHeadersTest extends TestCase
             $policy = $response->headers->get('Content-Security-Policy');
 
             $this->assertStringNotContainsString('127.0.0.1:5173', $policy);
+            $this->assertStringContainsString('https://terraria.wiki.gg https://calamitymod.wiki.gg', $policy);
             $this->assertSame(
                 'max-age=31536000; includeSubDomains',
                 $response->headers->get('Strict-Transport-Security'),

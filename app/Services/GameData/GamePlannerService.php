@@ -292,6 +292,7 @@ class GamePlannerService
                 'progression_value' => $entry['value'] ?? null,
                 'npc_global_id' => is_array($match) ? ($match['global_id'] ?? null) : null,
                 'npc_name' => is_array($match) ? ($match['display_name'] ?? null) : null,
+                'image_url' => $this->bossImageUrl($entry, $match),
                 'stats' => [
                     'life' => $stats['life'] ?? null,
                     'damage' => $stats['damage'] ?? null,
@@ -301,6 +302,32 @@ class GamePlannerService
         }
 
         return $targets;
+    }
+
+    /**
+     * @param  array<string, mixed>  $entry
+     * @param  array<string, mixed>|null  $npc
+     */
+    private function bossImageUrl(array $entry, ?array $npc): ?string
+    {
+        $name = trim((string) ($npc['display_name'] ?? $entry['name'] ?? ''));
+        if ($name === '') {
+            return null;
+        }
+
+        $vanillaBosses = [
+            'king-slime', 'eye-of-cthulhu', 'eater-of-worlds', 'brain-of-cthulhu',
+            'queen-bee', 'skeletron', 'deerclops', 'wall-of-flesh', 'queen-slime',
+            'the-twins', 'the-destroyer', 'skeletron-prime', 'plantera', 'golem',
+            'duke-fishron', 'empress-of-light', 'lunatic-cultist', 'moon-lord',
+        ];
+        $sourceKey = (string) ($entry['key'] ?? '');
+        $host = in_array($sourceKey, $vanillaBosses, true)
+            ? 'terraria.wiki.gg'
+            : 'calamitymod.wiki.gg';
+        $fileName = str_replace(' ', '_', $name).'.png';
+
+        return "https://{$host}/wiki/Special:Redirect/file/".rawurlencode($fileName);
     }
 
     /** @return array<string, array<string, mixed>> */

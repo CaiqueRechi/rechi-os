@@ -96,6 +96,7 @@ type TimelineTarget = {
     progression_value?: number | string | null;
     npc_global_id?: string | null;
     npc_name?: string | null;
+    image_url?: string | null;
     stats?: {
         life?: number | string | null;
         damage?: number | string | null;
@@ -1091,6 +1092,48 @@ function GameBuildCard({
     );
 }
 
+function TimelineMilestoneMarker({
+    index,
+    step,
+}: {
+    index: number;
+    step: TimelineStep;
+}) {
+    const targetName =
+        step.target?.npc_name ?? step.target?.name ?? step.milestone_name;
+
+    return (
+        <div className="absolute top-5 left-0 z-10 grid size-10 place-items-center overflow-hidden rounded-full border-4 border-[#d7a84b] bg-[#292141] text-sm font-black text-[#fff8dc] shadow-[0_0_22px_rgb(215_168_75/0.55)] lg:static lg:col-start-2 lg:row-start-1 lg:mx-auto lg:size-16 lg:border-[#6f5832] lg:bg-[#171424]">
+            <span className="lg:hidden">{index + 1}</span>
+            {step.target?.image_url ? (
+                <span className="relative hidden size-full place-items-center bg-[radial-gradient(circle_at_50%_35%,#fff8dc22,#171424_70%)] lg:grid">
+                    <img
+                        src={step.target.image_url}
+                        alt={targetName}
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        onError={(event) => {
+                            event.currentTarget.hidden = true;
+                            event.currentTarget.parentElement
+                                ?.querySelector('[data-marker-fallback]')
+                                ?.classList.remove('hidden');
+                        }}
+                        className="max-h-14 max-w-14 object-contain [image-rendering:pixelated]"
+                    />
+                    <span className="absolute right-0.5 bottom-0.5 rounded-full border border-[#d7a84b]/70 bg-[#0d1220] px-1 font-mono text-[9px] text-[#e8cf8b]">
+                        {index + 1}
+                    </span>
+                    <span className="hidden text-sm" data-marker-fallback>
+                        {index + 1}
+                    </span>
+                </span>
+            ) : (
+                <span className="hidden lg:inline">{index + 1}</span>
+            )}
+        </div>
+    );
+}
+
 function ItemDetailDialog({
     detail,
     onClose,
@@ -1669,9 +1712,10 @@ export default function GameDataTimeline() {
                                                     />
                                                 </div>
 
-                                                <div className="absolute top-5 left-0 z-10 grid size-10 place-items-center rounded-full border-4 border-[#d7a84b] bg-[#292141] text-sm font-black text-[#fff8dc] shadow-[0_0_22px_rgb(215_168_75/0.55)] lg:static lg:col-start-2 lg:row-start-1 lg:mx-auto">
-                                                    {index + 1}
-                                                </div>
+                                                <TimelineMilestoneMarker
+                                                    index={index}
+                                                    step={step}
+                                                />
 
                                                 <div
                                                     className={`col-start-2 mt-3 self-start rounded-lg border border-[#4b405f] bg-[#171424]/80 p-4 lg:row-start-1 lg:mt-2 ${infoSide}`}
@@ -1685,7 +1729,7 @@ export default function GameDataTimeline() {
                                                               ? 'Miniboss'
                                                               : 'Boss Checklist'}
                                                     </p>
-                                                    <h3 className="mt-1 font-black text-[#fff8dc]">
+                                                    <h3 className="mt-1 font-black [overflow-wrap:anywhere] break-words text-[#fff8dc]">
                                                         {step.milestone_name}
                                                     </h3>
                                                     {step.progression_value !=
