@@ -2,44 +2,48 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ScreenAccessLevel;
 use App\Models\SalemGameSave;
 use App\Models\SalemPlayer;
-use App\Services\Salem\SalemPlayerIdentityService;
+use App\Models\ScreenAccessPermission;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Symfony\Component\HttpFoundation\Cookie;
 use Tests\TestCase;
 
 class SalemGameTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_salem_route_is_public_and_creates_anonymous_progress(): void
+    public function test_salem_route_creates_progress_for_authorized_user(): void
     {
-        $response = $this->get('/salem');
+        $user = $this->salemUser();
+
+        $response = $this->actingAs($user)->get('/salem');
 
         $response->assertOk();
 
         $this->assertDatabaseCount('salem_players', 1);
         $this->assertDatabaseCount('salem_game_saves', 1);
-        $this->assertNotNull($this->salemCookie($response->headers->getCookies()));
+        $this->assertDatabaseHas('salem_players', [
+            'user_id' => $user->id,
+        ]);
     }
 
-    public function test_returning_visitor_keeps_the_same_save(): void
+    public function test_returning_user_keeps_the_same_save(): void
     {
-        $response = $this->get('/salem');
-        $cookie = $this->salemCookie($response->headers->getCookies());
+        $user = $this->salemUser();
 
-        $this->assertNotNull($cookie);
-        $visitorKey = SalemPlayer::query()->sole()->visitor_key;
+        $this->actingAs($user)
+            ->get('/salem')
+            ->assertOk();
 
-        $this->withCookie(SalemPlayerIdentityService::VISITOR_COOKIE, $visitorKey)
-            ->withCredentials()
+        $this->actingAs($user)
             ->postJson('/salem/actions', ['action' => 'program'])
             ->assertOk()
             ->assertJsonPath('accepted', true)
             ->assertJsonPath('reward', 18);
 
-        $this->withCookie(SalemPlayerIdentityService::VISITOR_COOKIE, $visitorKey)
+        $this->actingAs($user)
             ->get('/salem')
             ->assertOk();
 
@@ -51,10 +55,10 @@ class SalemGameTest extends TestCase
         ]);
     }
 
-    public function test_separate_visitors_do_not_share_saves(): void
+    public function test_separate_users_do_not_share_saves(): void
     {
-        $this->get('/salem')->assertOk();
-        $this->get('/salem')->assertOk();
+        $this->actingAs($this->salemUser('one@example.com'))->get('/salem')->assertOk();
+        $this->actingAs($this->salemUser('two@example.com'))->get('/salem')->assertOk();
 
         $this->assertDatabaseCount('salem_players', 2);
         $this->assertDatabaseCount('salem_game_saves', 2);
@@ -62,10 +66,11 @@ class SalemGameTest extends TestCase
 
     public function test_client_cannot_inject_arbitrary_progress(): void
     {
-        $this->postJson('/salem/actions', [
-            'action' => 'program',
-            'cozy_points' => 999999999,
-        ])
+        $this->actingAs($this->salemUser())
+            ->postJson('/salem/actions', [
+                'action' => 'program',
+                'cozy_points' => 999999999,
+            ])
             ->assertOk()
             ->assertJsonPath('reward', 18)
             ->assertJsonPath('save.cozy_points', 18);
@@ -77,28 +82,25 @@ class SalemGameTest extends TestCase
 
     public function test_progression_action_validation_and_cooldowns(): void
     {
-        $response = $this->get('/salem');
-        $cookie = $this->salemCookie($response->headers->getCookies());
+        $user = $this->salemUser();
 
-        $this->assertNotNull($cookie);
-        $visitorKey = SalemPlayer::query()->sole()->visitor_key;
+        $this->actingAs($user)
+            ->get('/salem')
+            ->assertOk();
 
-        $this->withCookie(SalemPlayerIdentityService::VISITOR_COOKIE, $visitorKey)
-            ->withCredentials()
+        $this->actingAs($user)
             ->postJson('/salem/actions', ['action' => 'program'])
             ->assertOk()
             ->assertJsonPath('accepted', true);
 
-        $this->withCookie(SalemPlayerIdentityService::VISITOR_COOKIE, $visitorKey)
-            ->withCredentials()
+        $this->actingAs($user)
             ->postJson('/salem/actions', ['action' => 'program'])
             ->assertOk()
             ->assertJsonPath('accepted', false)
             ->assertJsonPath('reward', 0)
             ->assertJsonPath('save.cozy_points', 18);
 
-        $this->withCookie(SalemPlayerIdentityService::VISITOR_COOKIE, $visitorKey)
-            ->withCredentials()
+        $this->actingAs($user)
             ->postJson('/salem/actions', ['action' => 'teleport'])
             ->assertUnprocessable();
     }
@@ -130,15 +132,16 @@ class SalemGameTest extends TestCase
         $this->assertSame('misty_rock_isle', $player->unlocks()->first()?->unlock_key);
     }
 
-    /** @param list<Cookie> $cookies */
-    private function salemCookie(array $cookies): ?Cookie
+    private function salemUser(string $email = 'salem@example.com'): User
     {
-        foreach ($cookies as $cookie) {
-            if ($cookie->getName() === SalemPlayerIdentityService::VISITOR_COOKIE) {
-                return $cookie;
-            }
-        }
+        $user = User::factory()->create(['email' => $email]);
 
-        return null;
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'salem',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+
+        return $user;
     }
 }
