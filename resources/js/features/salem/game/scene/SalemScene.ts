@@ -1793,6 +1793,7 @@ export class SalemScene implements SalemSceneHandle {
 
     private createSalemFallback(): void {
         this.fallbackSalem.scale.setScalar(1.12);
+        this.fallbackSalem.position.y = 0.08;
 
         const fur = new THREE.MeshStandardMaterial({
             color: '#171920',
@@ -1855,13 +1856,13 @@ export class SalemScene implements SalemSceneHandle {
                 fur,
             );
             paw.scale.set(1.25, 0.5, 0.7);
-            paw.position.set(0.22, -0.12, z);
+            paw.position.set(0.22, -0.04, z);
             paw.castShadow = true;
             this.fallbackSalem.add(paw);
         }
 
         const tailGroup = new THREE.Group();
-        tailGroup.position.set(-0.42, 0.21, 0);
+        tailGroup.position.set(-0.42, 0.27, 0);
         tailGroup.rotation.z = 1.05;
         this.salemTail = tailGroup;
         this.fallbackSalem.add(tailGroup);
@@ -2025,7 +2026,7 @@ export class SalemScene implements SalemSceneHandle {
             return;
         }
 
-        destination.y += 0.02;
+        destination.y += 0.26;
         this.moveSalemTo(destination);
         this.options.onActionRequest('walk');
     }
@@ -2272,7 +2273,7 @@ export class SalemScene implements SalemSceneHandle {
 
             return [
                 Math.sin(elapsed * 0.45) * 1.25,
-                0.7,
+                salemHome.idle[1],
                 Math.cos(elapsed * 0.38) * 1.05,
             ];
         }

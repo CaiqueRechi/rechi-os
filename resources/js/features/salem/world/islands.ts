@@ -59,15 +59,15 @@ export type IslandConfig = {
 };
 
 export const programmingSpot = {
-    approach: [1.1, 0.68, 1.55] as [number, number, number],
-    seat: [1.92, 0.92, 1.32] as [number, number, number],
+    approach: [1.1, 0.9, 1.55] as [number, number, number],
+    seat: [1.92, 1.04, 1.32] as [number, number, number],
     laptop: [2.18, 1.2, 1.03] as [number, number, number],
 };
 
 export const salemHome = {
-    idle: [0.65, 0.86, 1.34] as [number, number, number],
-    sleep: [-1.82, 0.86, 0.72] as [number, number, number],
-    inspect: [-2.36, 0.86, 1.22] as [number, number, number],
+    idle: [0.65, 1.02, 1.34] as [number, number, number],
+    sleep: [-1.82, 1.02, 0.72] as [number, number, number],
+    inspect: [-2.36, 1.02, 1.22] as [number, number, number],
 };
 
 export const islandConfigs: IslandConfig[] = [
