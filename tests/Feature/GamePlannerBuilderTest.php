@@ -46,7 +46,7 @@ class GamePlannerBuilderTest extends TestCase
             ->join('game_progression_milestones as milestone', 'milestone.id', '=', 'availability.milestone_id')
             ->where('availability.item_global_id', 'terraria:hardmode_recipe_blade')
             ->value('milestone.sort_order');
-        $this->assertSame(1000, $recipeGateMilestone);
+        $this->assertSame(700, $recipeGateMilestone);
         $dependencyGated = DB::table('game_item_availability')
             ->where('item_global_id', 'terraria:dependency_gated_item')->first();
         $this->assertNotNull($dependencyGated);
@@ -57,17 +57,19 @@ class GamePlannerBuilderTest extends TestCase
         $this->assertNotNull($vendorItem);
         $this->assertSame('vendor', $vendorItem->availability_type);
         $this->assertSame(0, json_decode($vendorItem->conditions_json, true, 512, JSON_THROW_ON_ERROR)['rank']);
+        $hardmodeNpcDropRank = $this->availabilityRank('terraria:warlock_charm');
+        $this->assertSame(700, $hardmodeNpcDropRank);
         $wallRank = $this->availabilityRank('terraria:wall_drop');
         $mechanicalRank = $this->availabilityRank('terraria:mechanical_drop');
         $moonLordRank = $this->availabilityRank('terraria:moon_lord_drop');
-        $this->assertSame(1000, $wallRank);
+        $this->assertSame(700, $wallRank);
         $this->assertGreaterThan($wallRank, $mechanicalRank);
         $this->assertLessThan($moonLordRank, $mechanicalRank);
-        $this->assertSame(2000, $moonLordRank);
+        $this->assertSame(1800, $moonLordRank);
         $this->assertDatabaseHas('game_planners', [
             'planner_key' => 'melee-generated',
             'status' => 'published',
-            'version' => 'availability-power-v4',
+            'version' => 'unlock-graph-boss-checklist-v5',
         ]);
         $this->assertDatabaseHas('game_planner_step_items', [
             'item_global_id' => 'terraria:copper_sword',
@@ -167,6 +169,7 @@ class GamePlannerBuilderTest extends TestCase
         });
         Schema::create('progression_stages', function (Blueprint $table): void {
             $table->id();
+            $table->string('global_id')->nullable();
             $table->integer('sort_order');
         });
         Schema::create('item_progression', function (Blueprint $table): void {
@@ -273,6 +276,13 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 26, 'mod_id' => 1, 'global_id' => 'terraria:mechanical_drop', 'display_name' => 'Mechanical Drop'],
             ['id' => 27, 'mod_id' => 1, 'global_id' => 'terraria:moon_lord_drop', 'display_name' => 'Moon Lord Drop'],
         ]);
+        DB::table('items')->insert([
+            'id' => 28,
+            'mod_id' => 1,
+            'global_id' => 'terraria:warlock_charm',
+            'display_name' => 'Warlock Charm',
+            'tooltip' => '8% increased summon damage',
+        ]);
         DB::table('combat_classes')->insert([
             ['id' => 1, 'class_key' => 'melee'],
             ['id' => 2, 'class_key' => 'ranged'],
@@ -320,6 +330,7 @@ class GamePlannerBuilderTest extends TestCase
             ['item_id' => 18, 'category_id' => 2],
             ['item_id' => 19, 'category_id' => 2],
             ['item_id' => 21, 'category_id' => 3],
+            ['item_id' => 28, 'category_id' => 2],
         ]);
         DB::table('item_properties')->insert([
             ['item_id' => 12, 'property_key' => 'bodyslot', 'text_value' => 'helmet'],
@@ -336,10 +347,11 @@ class GamePlannerBuilderTest extends TestCase
         ]);
 
         DB::table('npcs')->insert([
-            ['id' => 1, 'display_name' => 'Eye Boss'],
+            ['id' => 1, 'display_name' => 'King Slime'],
             ['id' => 2, 'display_name' => 'Wall of Flesh'],
             ['id' => 3, 'display_name' => 'The Destroyer'],
             ['id' => 4, 'display_name' => 'Moon Lord'],
+            ['id' => 5, 'display_name' => 'Goblin Warlock'],
         ]);
         DB::table('bosses')->insert([
             ['id' => 1, 'npc_id' => 1],
@@ -367,8 +379,8 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 3, 'item_id' => 4, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
             ['id' => 4, 'item_id' => 6, 'npc_id' => 1, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
             ['id' => 5, 'item_id' => 7, 'npc_id' => null, 'source_item_id' => 6, 'unresolved_source_name' => null, 'source_type' => 'container', 'condition_text' => null],
-            ['id' => 6, 'item_id' => 8, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => 'Post-Eye Boss'],
-            ['id' => 7, 'item_id' => 9, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Eye Boss', 'source_type' => 'npc', 'condition_text' => null],
+            ['id' => 6, 'item_id' => 8, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => 'Post-King Slime'],
+            ['id' => 7, 'item_id' => 9, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'King Slime', 'source_type' => 'npc', 'condition_text' => null],
             ['id' => 8, 'item_id' => 10, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => 'Final Mystery', 'source_type' => 'npc', 'condition_text' => null],
             ['id' => 9, 'item_id' => 12, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
             ['id' => 10, 'item_id' => 13, 'npc_id' => null, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'world', 'condition_text' => null],
@@ -384,6 +396,7 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 20, 'item_id' => 25, 'npc_id' => 2, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
             ['id' => 21, 'item_id' => 26, 'npc_id' => 3, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
             ['id' => 22, 'item_id' => 27, 'npc_id' => 4, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
+            ['id' => 23, 'item_id' => 28, 'npc_id' => 5, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
         ]);
         DB::table('recipes')->insert([
             ['id' => 1, 'result_item_id' => 3, 'is_historical' => false, 'raw_json' => null],

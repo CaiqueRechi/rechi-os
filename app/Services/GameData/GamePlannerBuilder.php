@@ -17,6 +17,10 @@ class GamePlannerBuilder
 
     private const MOON_LORD_RANK = 1800;
 
+    private const HARDMODE_NPC_NAMES = [
+        'goblinwarlock',
+    ];
+
     public function __construct(private readonly GameReforgeService $reforges) {}
 
     /** @return array<string, int|string> */
@@ -312,14 +316,26 @@ class GamePlannerBuilder
     private function loadNpcRanks(array $bosses): array
     {
         $ranks = [];
-        $rows = $this->catalogDatabase()->table('npcs')->get(['id']);
+        $rows = $this->catalogDatabase()->table('npcs')->get(['id', 'display_name']);
         foreach ($rows as $npc) {
             $row = (array) $npc;
             $npcId = (int) $row['id'];
-            $ranks[$npcId] = $bosses[$npcId]['rank'] ?? 0;
+            $ranks[$npcId] = max(
+                $bosses[$npcId]['rank'] ?? 0,
+                $this->npcFloorRank((string) ($row['display_name'] ?? ''))
+            );
         }
 
         return $ranks;
+    }
+
+    private function npcFloorRank(string $npcName): int
+    {
+        if (in_array($this->normalizeName($npcName), self::HARDMODE_NPC_NAMES, true)) {
+            return self::HARDMODE_RANK;
+        }
+
+        return 0;
     }
 
     /**
