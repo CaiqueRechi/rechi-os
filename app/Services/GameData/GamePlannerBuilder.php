@@ -17,10 +17,6 @@ class GamePlannerBuilder
 
     private const MOON_LORD_RANK = 1800;
 
-    private const HARDMODE_NPC_NAMES = [
-        'goblinwarlock',
-    ];
-
     public function __construct(private readonly GameReforgeService $reforges) {}
 
     /** @return array<string, int|string> */
@@ -41,7 +37,7 @@ class GamePlannerBuilder
         $progression = $this->loadBossChecklist();
         $items = $this->loadItemFacts();
         $bosses = $this->loadBossRanks($progression);
-        $npcRanks = $this->loadNpcRanks($bosses);
+        $npcRanks = $this->loadNpcRanks($bosses, $items);
         $dropMethods = $this->loadDropMethods($bosses, $npcRanks);
         $recipes = $this->loadRecipes($bosses);
         $availability = $this->deriveAvailability($items, $dropMethods, $recipes);
@@ -312,30 +308,59 @@ class GamePlannerBuilder
         return $bosses;
     }
 
-    /** @param array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}> $bosses */
-    private function loadNpcRanks(array $bosses): array
+    /**
+     * @param  array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}>  $bosses
+     * @param  array<int, array<string, mixed>>  $items
+     * @return array<int, int>
+     */
+    private function loadNpcRanks(array $bosses, array $items): array
     {
         $ranks = [];
-        $rows = $this->catalogDatabase()->table('npcs')->get(['id', 'display_name']);
+        $rows = $this->catalogDatabase()->table('npcs')->get([
+            'id', 'display_name', 'biome', 'event_name', 'types_json', 'raw_json',
+        ]);
         foreach ($rows as $npc) {
             $row = (array) $npc;
             $npcId = (int) $row['id'];
             $ranks[$npcId] = max(
                 $bosses[$npcId]['rank'] ?? 0,
-                $this->npcFloorRank((string) ($row['display_name'] ?? ''))
+                $this->conditionFloorRank(
+                    strtolower(implode(' ', array_filter([
+                        $row['display_name'] ?? null,
+                        $row['biome'] ?? null,
+                        $row['event_name'] ?? null,
+                        $row['types_json'] ?? null,
+                        $row['raw_json'] ?? null,
+                    ], static fn (mixed $value): bool => is_scalar($value)))),
+                    $bosses
+                )
+            );
+        }
+
+        foreach ($this->catalogDatabase()->table('drops')->whereNotNull('npc_id')->whereNotNull('item_id')
+            ->get(['npc_id', 'item_id', 'condition_text', 'conditions_json']) as $drop) {
+            $row = (array) $drop;
+            $npcId = (int) $row['npc_id'];
+            $itemId = (int) $row['item_id'];
+            if (! isset($ranks[$npcId], $items[$itemId])) {
+                continue;
+            }
+
+            $dropConditionRank = $this->conditionFloorRank(
+                strtolower(implode(' ', array_filter([
+                    $row['condition_text'] ?? null,
+                    $row['conditions_json'] ?? null,
+                ], static fn (mixed $value): bool => is_scalar($value)))),
+                $bosses
+            );
+            $ranks[$npcId] = max(
+                $ranks[$npcId],
+                (int) $items[$itemId]['floor_rank'],
+                $dropConditionRank
             );
         }
 
         return $ranks;
-    }
-
-    private function npcFloorRank(string $npcName): int
-    {
-        if (in_array($this->normalizeName($npcName), self::HARDMODE_NPC_NAMES, true)) {
-            return self::HARDMODE_RANK;
-        }
-
-        return 0;
     }
 
     /**

@@ -59,6 +59,8 @@ class GamePlannerBuilderTest extends TestCase
         $this->assertSame(0, json_decode($vendorItem->conditions_json, true, 512, JSON_THROW_ON_ERROR)['rank']);
         $hardmodeNpcDropRank = $this->availabilityRank('terraria:warlock_charm');
         $this->assertSame(700, $hardmodeNpcDropRank);
+        $hardmodeNpcRawRank = $this->availabilityRank('terraria:chaos_charm');
+        $this->assertSame(700, $hardmodeNpcRawRank);
         $wallRank = $this->availabilityRank('terraria:wall_drop');
         $mechanicalRank = $this->availabilityRank('terraria:mechanical_drop');
         $moonLordRank = $this->availabilityRank('terraria:moon_lord_drop');
@@ -179,6 +181,10 @@ class GamePlannerBuilderTest extends TestCase
         Schema::create('npcs', function (Blueprint $table): void {
             $table->id();
             $table->string('display_name');
+            $table->string('biome')->nullable();
+            $table->string('event_name')->nullable();
+            $table->json('types_json')->nullable();
+            $table->json('raw_json')->nullable();
         });
         Schema::create('npc_stats', function (Blueprint $table): void {
             $table->foreignId('npc_id');
@@ -283,6 +289,13 @@ class GamePlannerBuilderTest extends TestCase
             'display_name' => 'Warlock Charm',
             'tooltip' => '8% increased summon damage',
         ]);
+        DB::table('items')->insert([
+            'id' => 29,
+            'mod_id' => 1,
+            'global_id' => 'terraria:chaos_charm',
+            'display_name' => 'Chaos Charm',
+            'tooltip' => '6% increased movement speed',
+        ]);
         DB::table('combat_classes')->insert([
             ['id' => 1, 'class_key' => 'melee'],
             ['id' => 2, 'class_key' => 'ranged'],
@@ -331,6 +344,7 @@ class GamePlannerBuilderTest extends TestCase
             ['item_id' => 19, 'category_id' => 2],
             ['item_id' => 21, 'category_id' => 3],
             ['item_id' => 28, 'category_id' => 2],
+            ['item_id' => 29, 'category_id' => 2],
         ]);
         DB::table('item_properties')->insert([
             ['item_id' => 12, 'property_key' => 'bodyslot', 'text_value' => 'helmet'],
@@ -338,20 +352,23 @@ class GamePlannerBuilderTest extends TestCase
             ['item_id' => 14, 'property_key' => 'bodyslot', 'text_value' => 'pants'],
         ]);
         DB::table('progression_stages')->insert([
-            ['id' => 1, 'sort_order' => 200],
-            ['id' => 2, 'sort_order' => 250],
+            ['id' => 1, 'global_id' => null, 'sort_order' => 200],
+            ['id' => 2, 'global_id' => null, 'sort_order' => 250],
+            ['id' => 3, 'global_id' => 'terraria:hardmode', 'sort_order' => 200],
         ]);
         DB::table('item_progression')->insert([
             ['item_id' => 22, 'progression_stage_id' => 1],
             ['item_id' => 23, 'progression_stage_id' => 2],
+            ['item_id' => 28, 'progression_stage_id' => 3],
         ]);
 
         DB::table('npcs')->insert([
-            ['id' => 1, 'display_name' => 'King Slime'],
-            ['id' => 2, 'display_name' => 'Wall of Flesh'],
-            ['id' => 3, 'display_name' => 'The Destroyer'],
-            ['id' => 4, 'display_name' => 'Moon Lord'],
-            ['id' => 5, 'display_name' => 'Goblin Warlock'],
+            ['id' => 1, 'display_name' => 'King Slime', 'raw_json' => null],
+            ['id' => 2, 'display_name' => 'Wall of Flesh', 'raw_json' => null],
+            ['id' => 3, 'display_name' => 'The Destroyer', 'raw_json' => null],
+            ['id' => 4, 'display_name' => 'Moon Lord', 'raw_json' => null],
+            ['id' => 5, 'display_name' => 'Goblin Warlock', 'raw_json' => null],
+            ['id' => 6, 'display_name' => 'Chaos Elemental', 'raw_json' => '{"hardmode":"1"}'],
         ]);
         DB::table('bosses')->insert([
             ['id' => 1, 'npc_id' => 1],
@@ -397,6 +414,7 @@ class GamePlannerBuilderTest extends TestCase
             ['id' => 21, 'item_id' => 26, 'npc_id' => 3, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
             ['id' => 22, 'item_id' => 27, 'npc_id' => 4, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
             ['id' => 23, 'item_id' => 28, 'npc_id' => 5, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
+            ['id' => 24, 'item_id' => 29, 'npc_id' => 6, 'source_item_id' => null, 'unresolved_source_name' => null, 'source_type' => 'npc_drop', 'condition_text' => null],
         ]);
         DB::table('recipes')->insert([
             ['id' => 1, 'result_item_id' => 3, 'is_historical' => false, 'raw_json' => null],
