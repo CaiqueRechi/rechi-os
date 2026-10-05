@@ -5,6 +5,7 @@ namespace App\Services\GameData;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use stdClass;
@@ -170,8 +171,9 @@ class GamePlannerService
             ->get([
                 'ps.id', 'ps.title', 'ps.notes', 'ps.sort_order', 'ps.metadata_json',
                 'm.milestone_key', 'm.name as milestone_name', 'm.description as milestone_description',
-                'm.milestone_type', 'm.source_system', 'm.progression_value', 'm.requirements_json',
+                'm.milestone_type', 'm.source_system', 'm.source_key', 'm.progression_value', 'm.requirements_json',
             ]);
+        $targets = $this->timelineTargets($steps);
         $stepIds = $steps->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
         $items = $stepIds === [] ? collect() : DB::table('game_planner_step_items')
             ->whereIn('step_id', $stepIds)->orderBy('slot_type')->orderBy('priority')->get();
@@ -186,6 +188,7 @@ class GamePlannerService
         foreach ($steps as $step) {
             $stepData = (array) $step;
             $data = $this->decodeObject($step, ['metadata_json', 'requirements_json']);
+            $data['target'] = $targets[(int) $stepData['id']] ?? null;
             $stepItems = $itemsByStep->get($stepData['id'], collect());
             $data['items'] = $stepItems->map(function (stdClass $item) use ($summaries): array {
                 $itemData = (array) $item;
@@ -222,6 +225,132 @@ class GamePlannerService
         $data['timeline'] = $timeline;
 
         return $data;
+    }
+
+    /**
+     * @param  Collection<int, stdClass>  $steps
+     * @return array<int, array<string, mixed>>
+     */
+    private function timelineTargets(Collection $steps): array
+    {
+        $progressionEntries = $this->bossChecklistEntries();
+        $neededEntries = [];
+        foreach ($steps as $step) {
+            $stepData = (array) $step;
+            $sourceKey = (string) ($stepData['source_key'] ?? '');
+            $type = (string) ($stepData['milestone_type'] ?? '');
+            if ($sourceKey === '' || ! in_array($type, ['boss', 'miniboss'], true)) {
+                continue;
+            }
+            $neededEntries[(int) $stepData['id']] = $progressionEntries[$sourceKey] ?? [
+                'name' => (string) ($stepData['milestone_name'] ?? ''),
+                'aliases' => [],
+                'type' => $type,
+                'value' => $stepData['progression_value'] ?? null,
+            ];
+        }
+
+        if ($neededEntries === []) {
+            return [];
+        }
+
+        $db = $this->catalogDatabase();
+        $npcs = $db->table('bosses as b')->join('npcs as n', 'n.id', '=', 'b.npc_id')
+            ->get(['n.id', 'n.global_id', 'n.display_name', 'n.internal_name', 'n.biome', 'n.event_name']);
+        $npcIds = $npcs->pluck('id')->map(static fn (mixed $id): int => (int) $id)->all();
+        $stats = $npcIds === [] ? collect() : $db->table('npc_stats')->whereIn('npc_id', $npcIds)
+            ->whereIn('stat_key', ['life', 'damage', 'defense'])
+            ->get(['npc_id', 'stat_key', 'numeric_value', 'raw_value'])
+            ->groupBy('npc_id');
+
+        $candidates = $npcs->map(function (stdClass $npc) use ($stats): array {
+            $npcData = (array) $npc;
+            $npcStats = $stats->get($npcData['id'], collect());
+
+            return [
+                ...$npcData,
+                'normalized' => $this->normalizeName((string) $npcData['display_name']),
+                'stats' => $npcStats->mapWithKeys(static function (stdClass $stat): array {
+                    $statData = (array) $stat;
+
+                    return [(string) $statData['stat_key'] => $statData['numeric_value'] ?? $statData['raw_value']];
+                })->all(),
+            ];
+        })->values()->all();
+
+        $targets = [];
+        foreach ($neededEntries as $stepId => $entry) {
+            $aliases = array_values(array_filter([
+                (string) ($entry['name'] ?? ''),
+                ...array_map('strval', is_array($entry['aliases'] ?? null) ? $entry['aliases'] : []),
+            ]));
+            $match = $this->matchNpcForAliases($candidates, $aliases);
+            $stats = is_array($match) ? (array) ($match['stats'] ?? []) : [];
+            $targets[$stepId] = [
+                'name' => (string) ($entry['name'] ?? ''),
+                'type' => (string) ($entry['type'] ?? 'boss'),
+                'progression_value' => $entry['value'] ?? null,
+                'npc_global_id' => is_array($match) ? ($match['global_id'] ?? null) : null,
+                'npc_name' => is_array($match) ? ($match['display_name'] ?? null) : null,
+                'stats' => [
+                    'life' => $stats['life'] ?? null,
+                    'damage' => $stats['damage'] ?? null,
+                    'defense' => $stats['defense'] ?? null,
+                ],
+            ];
+        }
+
+        return $targets;
+    }
+
+    /** @return array<string, array<string, mixed>> */
+    private function bossChecklistEntries(): array
+    {
+        $path = (string) config('game-data.boss_checklist_path');
+        if ($path === '' || ! is_file($path)) {
+            return [];
+        }
+
+        $decoded = json_decode((string) file_get_contents($path), true);
+        $entries = is_array($decoded) && is_array($decoded['entries'] ?? null) ? $decoded['entries'] : [];
+
+        return collect($entries)->mapWithKeys(static function (array $entry): array {
+            $key = (string) ($entry['key'] ?? '');
+
+            return $key === '' ? [] : [$key => $entry];
+        })->all();
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $candidates
+     * @param  list<string>  $aliases
+     * @return array<string, mixed>|null
+     */
+    private function matchNpcForAliases(array $candidates, array $aliases): ?array
+    {
+        $normalizedAliases = array_values(array_filter(array_map(
+            fn (string $alias): string => $this->normalizeName($alias),
+            $aliases
+        )));
+
+        foreach ($normalizedAliases as $alias) {
+            foreach ($candidates as $candidate) {
+                if (($candidate['normalized'] ?? '') === $alias) {
+                    return $candidate;
+                }
+            }
+        }
+
+        foreach ($normalizedAliases as $alias) {
+            foreach ($candidates as $candidate) {
+                $name = (string) ($candidate['normalized'] ?? '');
+                if ($name !== '' && (str_contains($name, $alias) || str_contains($alias, $name))) {
+                    return $candidate;
+                }
+            }
+        }
+
+        return null;
     }
 
     /** @param array<string, mixed> $vector */
@@ -381,6 +510,13 @@ class GamePlannerService
     private function catalogDatabase(): ConnectionInterface
     {
         return DB::connection((string) config('game-data.connection', config('database.default')));
+    }
+
+    private function normalizeName(string $name): string
+    {
+        $normalized = strtolower(trim($name));
+
+        return preg_replace('/[^a-z0-9]+/', '', $normalized) ?? '';
     }
 
     /**

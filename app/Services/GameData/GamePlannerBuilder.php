@@ -7,6 +7,11 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
+/**
+ * @phpstan-type AvailabilityRow array{rank: int, type: string, confidence: string, method_key: string, label: string, requirements: list<array<string, mixed>>}
+ * @phpstan-type BossRank array{rank: int, name: string, score: float, entry_key: string, type: string}
+ * @phpstan-type MilestoneRow array{key: string, name: string, rank: int, description: string, type: string, source_system: string, source_key: string, progression_value: float}
+ */
 class GamePlannerBuilder
 {
     private const ALGORITHM_VERSION = 'unlock-graph-boss-checklist-v5';
@@ -242,12 +247,12 @@ class GamePlannerBuilder
 
         usort($entries, static fn (array $left, array $right): int => (float) $left['value'] <=> (float) $right['value']);
 
-        return array_values($entries);
+        return $entries;
     }
 
     /**
      * @param  list<array<string, mixed>>  $progression
-     * @return array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}>
+     * @return array<int, BossRank>
      */
     private function loadBossRanks(array $progression): array
     {
@@ -309,7 +314,7 @@ class GamePlannerBuilder
     }
 
     /**
-     * @param  array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}>  $bosses
+     * @param  array<int, BossRank>  $bosses
      * @param  array<int, array<string, mixed>>  $items
      * @return array<int, int>
      */
@@ -364,7 +369,7 @@ class GamePlannerBuilder
     }
 
     /**
-     * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
+     * @param  array<int, BossRank>  $bosses
      * @param  array<int, int>  $npcRanks
      * @return array<int, list<array<string, mixed>>>
      */
@@ -431,7 +436,7 @@ class GamePlannerBuilder
     }
 
     /**
-     * @param  array<int, array{rank: int, name: string, score: float}>  $bosses
+     * @param  array<int, BossRank>  $bosses
      * @return array<int, list<array<string, mixed>>>
      */
     private function loadRecipes(array $bosses): array
@@ -525,7 +530,7 @@ class GamePlannerBuilder
      * @param  array<int, array<string, mixed>>  $items
      * @param  array<int, list<array<string, mixed>>>  $dropMethods
      * @param  array<int, list<array<string, mixed>>>  $recipes
-     * @return array<int, array<string, mixed>>
+     * @return array<int, AvailabilityRow>
      */
     private function deriveAvailability(array $items, array $dropMethods, array $recipes): array
     {
@@ -665,15 +670,18 @@ class GamePlannerBuilder
                 );
                 $best = $methods[0];
                 $rank = max((int) $item['floor_rank'], $best['rank']);
+                $bestRequirements = is_array($best['requirements'] ?? null)
+                    ? array_values($best['requirements'])
+                    : [];
                 $derived = [
-                    'rank' => $rank,
-                    'type' => $best['type'],
-                    'confidence' => $best['confidence'],
-                    'method_key' => $best['method_key'] ?? $best['type'],
-                    'label' => $best['label'] ?? 'Desbloquear o item',
+                    'rank' => (int) $rank,
+                    'type' => (string) $best['type'],
+                    'confidence' => (string) $best['confidence'],
+                    'method_key' => (string) ($best['method_key'] ?? $best['type']),
+                    'label' => (string) ($best['label'] ?? 'Desbloquear o item'),
                     'requirements' => [
                         ...$this->floorRequirements((int) $item['floor_rank']),
-                        ...($best['requirements'] ?? []),
+                        ...$bestRequirements,
                     ],
                 ];
                 if ($derived !== $availability[$itemId]) {
@@ -690,7 +698,10 @@ class GamePlannerBuilder
         return $availability;
     }
 
-    /** @param array<string, mixed> $item */
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array<string, mixed>|null
+     */
     private function specialUnlockMethod(array $item): ?array
     {
         $oreTiers = [
@@ -793,7 +804,7 @@ class GamePlannerBuilder
         return $matches >= 2;
     }
 
-    /** @param array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}> $bosses */
+    /** @param array<int, BossRank> $bosses */
     private function conditionFloorRank(string $condition, array $bosses): int
     {
         $rank = 0;
@@ -812,7 +823,7 @@ class GamePlannerBuilder
     }
 
     /**
-     * @param  array<int, array{rank: int, name: string, score: float, entry_key: string, type: string}>  $bosses
+     * @param  array<int, BossRank>  $bosses
      * @return list<array<string, mixed>>
      */
     private function requirementsFromCondition(string $condition, array $bosses): array
@@ -891,7 +902,10 @@ class GamePlannerBuilder
         };
     }
 
-    /** @param list<array<string, mixed>> $requirements */
+    /**
+     * @param  list<array<string, mixed>>  $requirements
+     * @return list<array<string, mixed>>
+     */
     private function uniqueRequirements(array $requirements): array
     {
         $seen = [];
@@ -921,7 +935,7 @@ class GamePlannerBuilder
 
     /**
      * @param  list<array<string, mixed>>  $progression
-     * @return list<array<string, mixed>>
+     * @return list<MilestoneRow>
      */
     private function deriveMilestones(array $progression): array
     {
@@ -958,7 +972,7 @@ class GamePlannerBuilder
     }
 
     /**
-     * @param  list<array{key: string, name: string, rank: int, description: string}>  $milestones
+     * @param  list<MilestoneRow>  $milestones
      * @return array<string, int>
      */
     private function storeMilestones(int $trackId, array $milestones): array
@@ -999,8 +1013,8 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array<string, mixed>>  $items
-     * @param  array<int, array{rank: int, type: string, confidence: string}>  $availability
-     * @param  list<array{key: string, name: string, rank: int, description: string}>  $milestones
+     * @param  array<int, AvailabilityRow>  $availability
+     * @param  list<MilestoneRow>  $milestones
      * @param  array<string, int>  $milestoneIds
      */
     private function storeAvailability(
@@ -1040,7 +1054,7 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array<string, mixed>>  $items
-     * @param  array<int, array<string, mixed>>  $availability
+     * @param  array<int, AvailabilityRow>  $availability
      */
     private function storeUnlockRules(int $trackId, array $items, array $availability): void
     {
@@ -1067,9 +1081,7 @@ class GamePlannerBuilder
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
-            $requirementsByRule[$globalId.'|'.$methodKey] = $this->uniqueRequirements(
-                (array) ($unlock['requirements'] ?? [])
-            );
+            $requirementsByRule[$globalId.'|'.$methodKey] = $this->uniqueRequirements($unlock['requirements']);
             if (count($rows) >= 500) {
                 DB::table('game_item_unlock_rules')->insert($rows);
                 $rows = [];
@@ -1123,7 +1135,7 @@ class GamePlannerBuilder
 
     /**
      * @param  array<int, array<string, mixed>>  $items
-     * @param  array<int, array{rank: int, type: string, confidence: string}>  $availability
+     * @param  array<int, AvailabilityRow>  $availability
      * @param  array<string, mixed>  $archetype
      * @return list<array<string, mixed>>
      */
@@ -1249,8 +1261,10 @@ class GamePlannerBuilder
         return false;
     }
 
-    /** @param array<string, mixed> $item */
-    /** @return array{offense: float, defense: float, utility: float} */
+    /**
+     * @param  array<string, mixed>  $item
+     * @return array{offense: float, defense: float, utility: float}
+     */
     private function powerVector(array $item, string $role, string $playstyle): array
     {
         $stats = $item['stats'];
@@ -1279,7 +1293,7 @@ class GamePlannerBuilder
         preg_match_all('/(\d+(?:\.\d+)?)\s*%\s*([^.;,\n]*)/', $tooltip, $matches, PREG_SET_ORDER);
         foreach ($matches as $match) {
             $value = (float) $match[1];
-            $effect = (string) ($match[2] ?? '');
+            $effect = (string) $match[2];
             if ($this->containsAny($effect, ['damage reduction', 'endurance', 'dodge', 'life', 'defense', 'damage taken'])) {
                 $vector['defense'] += $value;
             } elseif ($this->containsAny($effect, ['damage', 'critical', 'crit', 'attack speed', 'melee speed', 'minion', 'stealth'])) {
@@ -1363,7 +1377,7 @@ class GamePlannerBuilder
     /**
      * @param  array<string, mixed>  $archetype
      * @param  list<array<string, mixed>>  $candidates
-     * @param  list<array{key: string, name: string, rank: int, description: string}>  $milestones
+     * @param  list<MilestoneRow>  $milestones
      * @param  array<string, int>  $milestoneIds
      */
     private function storePlanner(
@@ -1492,8 +1506,8 @@ class GamePlannerBuilder
     }
 
     /**
-     * @param  list<array{key: string, name: string, rank: int, description: string}>  $milestones
-     * @return array{key: string, name: string, rank: int, description: string}
+     * @param  list<MilestoneRow>  $milestones
+     * @return MilestoneRow
      */
     private function milestoneForRank(array $milestones, int $rank): array
     {
@@ -1509,23 +1523,6 @@ class GamePlannerBuilder
         }
 
         return $lastMilestone;
-    }
-
-    /** @param list<float> $values */
-    private function lowerBound(array $values, float $target): int
-    {
-        $low = 0;
-        $high = count($values);
-        while ($low < $high) {
-            $middle = intdiv($low + $high, 2);
-            if ($values[$middle] < $target) {
-                $low = $middle + 1;
-            } else {
-                $high = $middle;
-            }
-        }
-
-        return $low;
     }
 
     /** @return array<string, mixed> */

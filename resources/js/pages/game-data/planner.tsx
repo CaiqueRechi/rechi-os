@@ -114,6 +114,7 @@ function numericStat(item: ItemSummary | null, ...keys: string[]): number {
     for (const key of keys) {
         const value = item.stats[key];
         const numeric = typeof value === 'number' ? value : Number(value);
+
         if (Number.isFinite(numeric)) {
             return numeric;
         }
@@ -137,6 +138,7 @@ function ItemSprite({
     displaySize: number;
 }) {
     const icon = item.icon;
+
     if (!icon?.url) {
         return <Boxes className="size-6 text-muted-foreground" />;
     }
@@ -144,6 +146,7 @@ function ItemSprite({
     const sourceWidth = Number(icon.width ?? 0);
     const sourceHeight = Number(icon.height ?? 0);
     const metadataFrameHeight = Number(icon.metadata_json?.frame_height ?? 0);
+
     if (sourceWidth <= 0 || sourceHeight <= 0) {
         return (
             <img
@@ -318,9 +321,11 @@ export default function GameBuildPlanner() {
                 sort,
                 direction,
             });
+
             if (query.trim()) {
                 params.set('q', query.trim());
             }
+
             if (source !== 'all') {
                 params.set('mod', source);
             }
@@ -339,10 +344,13 @@ export default function GameBuildPlanner() {
                     meta?: PaginationMeta;
                     message?: string;
                 };
+
                 if (!response.ok) {
                     throw new Error(payload.message ?? 'Falha na busca.');
                 }
+
                 setResults(payload.data ?? []);
+
                 if (payload.meta) {
                     setPagination(payload.meta);
                 }
@@ -353,6 +361,7 @@ export default function GameBuildPlanner() {
                 ) {
                     return;
                 }
+
                 setError(
                     reason instanceof Error
                         ? reason.message
@@ -444,6 +453,7 @@ export default function GameBuildPlanner() {
         if (!activeSlot) {
             return;
         }
+
         setLoadout((current) => ({ ...current, [activeSlot]: item }));
         setActiveSlot(null);
     }

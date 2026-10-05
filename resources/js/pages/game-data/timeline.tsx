@@ -17,7 +17,6 @@ import type { FormEvent } from 'react';
 import {
     Dialog,
     DialogContent,
-    DialogDescription,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
@@ -86,8 +85,22 @@ type TimelineStep = {
     milestone_description?: string | null;
     milestone_type?: string;
     progression_value?: number | string | null;
+    target?: TimelineTarget | null;
     items: PlannerItem[];
     build: BuildLoadout;
+};
+
+type TimelineTarget = {
+    name: string;
+    type: string;
+    progression_value?: number | string | null;
+    npc_global_id?: string | null;
+    npc_name?: string | null;
+    stats?: {
+        life?: number | string | null;
+        damage?: number | string | null;
+        defense?: number | string | null;
+    };
 };
 
 type Planner = {
@@ -231,7 +244,241 @@ function numericPlayerStat(value: unknown): number | null {
     }
 
     const match = value.match(/-?\d+(?:\.\d+)?/);
+
     return match ? Number(match[0]) : null;
+}
+
+function numericValue(value: unknown, fallback = 0): number {
+    const numeric = numericPlayerStat(value);
+
+    return numeric === null || !Number.isFinite(numeric) ? fallback : numeric;
+}
+
+function itemStat(item: PlannerItem | null | undefined, key: string): number {
+    return numericValue(item?.item?.stats?.[key], 0);
+}
+
+function itemTooltip(item: PlannerItem | null | undefined): string {
+    return `${item?.item?.tooltip ?? ''} ${item?.item?.description ?? ''}`;
+}
+
+function equipmentItems(build: BuildLoadout): PlannerItem[] {
+    return [
+        build.weapon,
+        build.armor.head,
+        build.armor.body,
+        build.armor.legs,
+        ...build.armor.other,
+        ...build.accessories,
+    ].filter((item): item is PlannerItem => Boolean(item?.item));
+}
+
+function sumTooltipPercent(items: PlannerItem[], words: string[]): number {
+    return items.reduce((total, item) => {
+        const tooltip = itemTooltip(item).toLowerCase();
+        const matches = Array.from(
+            tooltip.matchAll(/(\d+(?:\.\d+)?)\s*%\s*([^.;,\n]*)/g),
+        );
+
+        return (
+            total +
+            matches.reduce((subtotal, match) => {
+                const effect = match[2] ?? '';
+
+                return words.some((word) => effect.includes(word))
+                    ? subtotal + Number(match[1])
+                    : subtotal;
+            }, 0)
+        );
+    }, 0);
+}
+
+function buildDamageDefaults(step: TimelineStep) {
+    const items = equipmentItems(step.build);
+    const accessoryReforges = step.build.accessories
+        .map((accessory) => accessory.reforge)
+        .filter((reforge): reforge is NonNullable<PlannerItem['reforge']> =>
+            Boolean(reforge),
+        );
+    const useTime = Math.max(1, itemStat(step.build.weapon, 'use_time') || 30);
+    const damagePercent =
+        sumTooltipPercent(items, ['damage', 'minion', 'summon', 'stealth']) +
+        accessoryReforges.reduce(
+            (total, reforge) => total + reforge.damage_percent,
+            0,
+        );
+    const criticalAdditional =
+        itemStat(step.build.weapon, 'critical_chance') +
+        sumTooltipPercent(items, ['critical', 'crit']) +
+        accessoryReforges.reduce(
+            (total, reforge) => total + reforge.critical_chance_percent,
+            0,
+        );
+
+    return {
+        targetDefense: numericValue(step.target?.stats?.defense, 0),
+        targetReduction: 0,
+        damagePercent,
+        ammoDamage: 0,
+        flatArmorPenetration: itemStat(step.build.weapon, 'armor_penetration'),
+        percentArmorPenetration: 0,
+        criticalAdditional,
+        criticalMultiplier: 2,
+        attacksPerSecond: 60 / useTime,
+    };
+}
+
+function DamageSimulator({ step }: { step: TimelineStep }) {
+    const defaults = useMemo(() => buildDamageDefaults(step), [step]);
+    const defaultsKey = JSON.stringify(defaults);
+
+    return (
+        <DamageSimulatorForm
+            key={`${step.id}-${defaultsKey}`}
+            step={step}
+            defaults={defaults}
+        />
+    );
+}
+
+function DamageSimulatorForm({
+    step,
+    defaults,
+}: {
+    step: TimelineStep;
+    defaults: ReturnType<typeof buildDamageDefaults>;
+}) {
+    const [form, setForm] = useState(defaults);
+
+    const baseDamage = itemStat(step.build.weapon, 'damage');
+    const rawDamage = Math.max(1, baseDamage + form.ammoDamage);
+    const buffedDamage = rawDamage * (1 + form.damagePercent / 100);
+    const effectiveDefense = Math.max(
+        0,
+        (form.targetDefense - form.flatArmorPenetration) *
+            (1 - form.percentArmorPenetration / 100),
+    );
+    const defenseBlocked = effectiveDefense / 2;
+    const normalHit = Math.max(1, buffedDamage - defenseBlocked) *
+        (1 - form.targetReduction / 100);
+    const criticalHit = normalHit * Math.max(1, form.criticalMultiplier);
+    const criticalChance = Math.max(0, Math.min(100, form.criticalAdditional));
+    const averageHit =
+        normalHit * (1 - criticalChance / 100) +
+        criticalHit * (criticalChance / 100);
+    const dps = averageHit * Math.max(0, form.attacksPerSecond);
+    const lowRoll = normalHit * 0.85;
+    const highRoll = normalHit * 1.15;
+    const defensePressure = Math.max(
+        0,
+        Math.min(1, defenseBlocked / Math.max(1, buffedDamage)),
+    );
+    const damageBars = Math.max(
+        0,
+        Math.min(10, Math.round((1 - defensePressure) * 10)),
+    );
+    const meter = `${'█'.repeat(damageBars)}${'░'.repeat(10 - damageBars)}`;
+    const targetName =
+        step.target?.npc_name ?? step.target?.name ?? step.milestone_name;
+
+    function updateField(
+        key: keyof typeof form,
+        value: string,
+    ): void {
+        setForm((current) => ({
+            ...current,
+            [key]: Number.isFinite(Number(value)) ? Number(value) : 0,
+        }));
+    }
+
+    const fields: Array<{
+        key: keyof typeof form;
+        label: string;
+        step?: string;
+    }> = [
+        { key: 'targetDefense', label: 'Defesa do alvo' },
+        { key: 'targetReduction', label: 'Redução de dano do alvo (%)' },
+        { key: 'damagePercent', label: 'Bônus de dano da build (%)' },
+        { key: 'ammoDamage', label: 'Dano base da munição' },
+        { key: 'flatArmorPenetration', label: 'Penetração de armadura' },
+        { key: 'percentArmorPenetration', label: 'Penetração percentual (%)' },
+        { key: 'criticalAdditional', label: 'Crítico total (%)' },
+        { key: 'criticalMultiplier', label: 'Multiplicador crítico', step: '0.1' },
+        { key: 'attacksPerSecond', label: 'Acertos por segundo', step: '0.05' },
+    ];
+
+    return (
+        <details className="border-t border-[#4b405f] bg-[#0d1220]/75 p-4">
+            <summary className="cursor-pointer text-sm font-black text-[#fff8dc]">
+                Simular dano contra {targetName}
+            </summary>
+            <p className="mt-2 text-[11px] leading-relaxed text-[#81768f]">
+                Valores preenchidos a partir da arma, reforges, bônus descritos
+                nos equipamentos e defesa do alvo desta etapa.
+            </p>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-3 xl:grid-cols-4">
+                {fields.map((field) => (
+                    <label
+                        key={field.key}
+                        className="grid gap-1 text-[10px] font-bold text-[#c9c1d7]"
+                    >
+                        {field.label}
+                        <input
+                            type="number"
+                            step={field.step ?? '1'}
+                            value={Number(form[field.key].toFixed(2))}
+                            onChange={(event) =>
+                                updateField(field.key, event.target.value)
+                            }
+                            className="h-8 rounded border border-[#4b405f] bg-[#f4f7fb] px-2 text-sm text-[#111827]"
+                        />
+                    </label>
+                ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 text-xs sm:grid-cols-2 xl:grid-cols-4">
+                <strong className="text-[#fff8dc]">
+                    Acerto normal
+                    <span className="block text-base text-[#e8cf8b]">
+                        {formatStatValue(normalHit)}
+                    </span>
+                </strong>
+                <strong className="text-[#fff8dc]">
+                    Acerto crítico
+                    <span className="block text-base text-[#e8cf8b]">
+                        {formatStatValue(criticalHit)}
+                    </span>
+                </strong>
+                <strong className="text-[#fff8dc]">
+                    Faixa normal ±15%
+                    <span className="block text-base text-[#e8cf8b]">
+                        {formatStatValue(lowRoll)}–{formatStatValue(highRoll)}
+                    </span>
+                </strong>
+                <strong className="text-[#fff8dc]">
+                    DPS estimado
+                    <span className="block text-base text-[#e8cf8b]">
+                        {formatStatValue(dps)}
+                    </span>
+                </strong>
+            </div>
+
+            <div className="mt-4 rounded-md border border-[#4b405f] bg-black/20 p-3">
+                <div className="flex items-center justify-between gap-3 font-mono text-xs text-[#c9c1d7]">
+                    <span>Dano</span>
+                    <span className="tracking-[0.16em] text-[#e8cf8b]">
+                        |{meter}|
+                    </span>
+                    <span>Defesa</span>
+                </div>
+                <p className="mt-2 text-[10px] text-[#81768f]">
+                    Defesa efetiva: {formatStatValue(effectiveDefense)} ·
+                    bloqueio estimado: {formatStatValue(defenseBlocked)}
+                </p>
+            </div>
+        </details>
+    );
 }
 
 function PlayerInfoSection({
@@ -333,11 +580,13 @@ function RecipeDetails({
             .map((station) => textValue(station.name))
             .filter((name): name is string => name !== null);
         const rows: PlayerInfoCard['rows'] = [];
+
         if (stationNames.length > 0) {
             rows.push({ label: 'Estação', value: stationNames.join(', ') });
         }
 
         const resultAmount = Number(record.result_amount ?? 1);
+
         if (usedIn && Number.isFinite(resultAmount) && resultAmount > 1) {
             rows.push({ label: 'Produz', value: String(resultAmount) });
         }
@@ -358,16 +607,19 @@ function RecipeDetails({
 
 function formatDropChance(record: Record<string, unknown>): string | null {
     const raw = textValue(record.chance_raw);
+
     if (raw) {
         return raw;
     }
 
     const chance = Number(record.chance);
+
     if (!Number.isFinite(chance)) {
         return null;
     }
 
     const percentage = chance <= 1 ? chance * 100 : chance;
+
     return `${formatStatValue(percentage)}%`;
 }
 
@@ -379,17 +631,23 @@ function DropDetails({ records }: { records: Array<Record<string, unknown>> }) {
             minimum === maximum ? String(minimum) : `${minimum}–${maximum}`;
         const rows: PlayerInfoCard['rows'] = [];
         const chance = formatDropChance(record);
+
         if (chance) {
             rows.push({ label: 'Chance', value: chance });
         }
+
         if (Number.isFinite(minimum) && Number.isFinite(maximum)) {
             rows.push({ label: 'Quantidade', value: quantity });
         }
+
         const difficulty = textValue(record.difficulty);
+
         if (difficulty) {
             rows.push({ label: 'Dificuldade', value: difficulty });
         }
+
         const condition = textValue(record.condition_text);
+
         if (condition) {
             rows.push({ label: 'Condição', value: condition });
         }
@@ -827,6 +1085,8 @@ function GameBuildCard({
                     ))}
                 </div>
             </div>
+
+            <DamageSimulator step={step} />
         </article>
     );
 }
@@ -1013,6 +1273,7 @@ export default function GameDataTimeline() {
                 const nextPlanner = await getJson<Planner>(
                     `/dashboard/game-data/planners/${encodeURIComponent(plannerKey)}?balance=${balanceValue}`,
                 );
+
                 if (requestId === plannerRequest.current) {
                     setPlanner(nextPlanner);
                 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Services\GameData\GamePlannerService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -112,6 +113,11 @@ class GamePlannerBuilderTest extends TestCase
             DB::table('game_progression_milestones')->where('track_id', $trackId)->count(),
             DB::table('game_planner_steps')->where('planner_id', $meleePlannerId)->count()
         );
+
+        $planner = app(GamePlannerService::class)->planner('melee-generated');
+        $kingSlimeStep = collect($planner['timeline'] ?? [])->firstWhere('milestone_name', 'King Slime');
+        $this->assertSame('King Slime', $kingSlimeStep['target']['npc_name'] ?? null);
+        $this->assertSame(10, (int) ($kingSlimeStep['target']['stats']['defense'] ?? 0));
     }
 
     private function createCatalogSchema(): void
@@ -119,12 +125,15 @@ class GamePlannerBuilderTest extends TestCase
         Schema::create('mods', function (Blueprint $table): void {
             $table->id();
             $table->string('mod_key');
+            $table->string('name')->nullable();
         });
         Schema::create('items', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('mod_id');
             $table->string('global_id');
             $table->string('display_name');
+            $table->string('internal_name')->nullable();
+            $table->integer('numeric_id')->nullable();
             $table->text('tooltip')->nullable();
             $table->text('description')->nullable();
             $table->string('rarity_text')->nullable();
@@ -180,7 +189,9 @@ class GamePlannerBuilderTest extends TestCase
         });
         Schema::create('npcs', function (Blueprint $table): void {
             $table->id();
+            $table->string('global_id')->nullable();
             $table->string('display_name');
+            $table->string('internal_name')->nullable();
             $table->string('biome')->nullable();
             $table->string('event_name')->nullable();
             $table->json('types_json')->nullable();
@@ -242,7 +253,7 @@ class GamePlannerBuilderTest extends TestCase
 
     private function seedLogicalProgressionFixture(): void
     {
-        DB::table('mods')->insert(['id' => 1, 'mod_key' => 'terraria']);
+        DB::table('mods')->insert(['id' => 1, 'mod_key' => 'terraria', 'name' => 'Terraria']);
         DB::table('items')->insert([
             ['id' => 1, 'mod_id' => 1, 'global_id' => 'terraria:copper_sword', 'display_name' => 'Copper Sword'],
             ['id' => 2, 'mod_id' => 1, 'global_id' => 'terraria:eye_blade', 'display_name' => 'Eye Blade'],

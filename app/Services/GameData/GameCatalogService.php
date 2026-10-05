@@ -100,23 +100,25 @@ class GameCatalogService
         $direction = ($filters['direction'] ?? 'asc') === 'desc' ? 'desc' : 'asc';
 
         $paginator = $query->orderBy($sort, $direction)->orderBy('i.id')->paginate($this->perPage($filters));
-        $globalIds = array_values(collect($paginator->items())->map(
-            static fn (object $item): string => (string) ((array) $item)['global_id']
-        )->all());
-        $itemIds = array_values(collect($paginator->items())->map(
-            static fn (object $item): int => (int) ((array) $item)['id']
-        )->all());
+        $paginatorItems = $paginator->items();
+        $globalIds = array_values(array_map(
+            static fn (object $item): string => (string) ((array) $item)['global_id'],
+            $paginatorItems
+        ));
+        $itemIds = array_values(array_map(
+            static fn (object $item): int => (int) ((array) $item)['id'],
+            $paginatorItems
+        ));
         $assets = $this->assets->forItems($globalIds);
         $stats = $itemIds === [] ? collect() : $this->database()->table('item_stats')->whereIn('item_id', $itemIds)
             ->get(['item_id', 'stat_key', 'numeric_value', 'text_value', 'raw_value'])->groupBy('item_id');
-        $paginator->setCollection(collect($paginator->items())->map(static function (object $item) use ($assets, $stats): object {
+        $paginator->setCollection(collect($paginatorItems)->map(static function (object $item) use ($assets, $stats): object {
             $row = (array) $item;
             $row['icon'] = $assets[(string) $row['global_id']] ?? null;
-            $row['stats'] = collect($stats->get((int) $row['id'], collect()))->mapWithKeys(
-                static function (stdClass $stat): array {
-                    return [(string) $stat->stat_key => $stat->numeric_value ?? $stat->text_value ?? $stat->raw_value];
-                }
-            )->all();
+            $row['stats'] = [];
+            foreach ($stats->get((int) $row['id'], []) as $stat) {
+                $row['stats'][(string) $stat->stat_key] = $stat->numeric_value ?? $stat->text_value ?? $stat->raw_value;
+            }
 
             return (object) $row;
         }));
