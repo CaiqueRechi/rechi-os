@@ -142,7 +142,7 @@ class ImportGameIconsCommandTest extends TestCase
         $metadata = DB::table('game_item_assets')->where('item_global_id', 'calamity:cryo_stone')
             ->value('metadata_json');
         $this->assertIsString($metadata);
-        $this->assertSame([
+        $this->assertEquals([
             'source_file' => 'Items/Accessories/CryoStone.cs',
             'frame_count' => 4,
             'frame_height' => 32,

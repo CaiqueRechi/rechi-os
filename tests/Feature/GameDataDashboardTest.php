@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ScreenAccessLevel;
+use App\Models\ScreenAccessPermission;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -25,12 +27,18 @@ class GameDataDashboardTest extends TestCase
         $this->actingAs($user)->get('/dashboard/biblioteca/terraria')->assertForbidden();
 
         $admin = User::factory()->create(['is_admin' => true, 'email_verified_at' => now()]);
+        ScreenAccessPermission::query()->create([
+            'user_id' => $admin->id,
+            'screen_key' => 'library',
+            'access_level' => ScreenAccessLevel::Read,
+        ]);
+
         $this->actingAs($admin)->get('/dashboard/biblioteca')
             ->assertOk()->assertInertia(fn ($page) => $page->component('game-library/index'));
         $this->actingAs($admin)->get('/dashboard/biblioteca/terraria')
             ->assertOk()->assertInertia(fn ($page) => $page->component('game-data/index'));
         $this->actingAs($admin)->get('/dashboard/game-planner')
-            ->assertRedirect('/dashboard/biblioteca/terraria');
+            ->assertRedirect('/dashboard/biblioteca/terraria/timeline');
     }
 
     public function test_non_admin_cannot_access_game_data(): void

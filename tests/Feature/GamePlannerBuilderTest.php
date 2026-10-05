@@ -202,6 +202,7 @@ class GamePlannerBuilderTest extends TestCase
             $table->foreignId('npc_id');
             $table->string('stat_key');
             $table->decimal('numeric_value', 18, 6)->nullable();
+            $table->text('raw_value')->nullable();
         });
         Schema::create('bosses', function (Blueprint $table): void {
             $table->id();
