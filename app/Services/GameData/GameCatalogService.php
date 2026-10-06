@@ -188,7 +188,7 @@ class GameCatalogService
             'completeness' => [
                 'has_stats' => $stats->isNotEmpty(),
                 'has_classification' => $db->table('item_categories')->where('item_id', $itemId)->exists(),
-                'has_acquisition' => $recipes->isNotEmpty() || $drops->isNotEmpty()
+                'has_acquisition' => $recipes->isNotEmpty() || $drops !== []
                     || $db->table('acquisition_methods')->where('item_id', $itemId)->exists(),
                 'unresolved_recipe_ingredients' => $recipes->sum(
                     static function (array $recipe): int {
@@ -208,7 +208,7 @@ class GameCatalogService
                         return $unresolved;
                     }
                 ),
-                'drop_chances_missing' => $drops->whereNull('chance')->count(),
+                'drop_chances_missing' => collect($drops)->whereNull('chance')->count(),
             ],
         ];
     }
@@ -417,17 +417,39 @@ class GameCatalogService
         return $this->hydrateRecipes($recipes);
     }
 
-    /** @return Collection<int, array<string, mixed>> */
-    private function dropsForItem(int $itemId): Collection
+    /** @return list<non-empty-array<string, mixed>> */
+    private function dropsForItem(int $itemId): array
     {
-        return $this->database()->table('drops as d')->leftJoin('npcs as n', 'n.id', '=', 'd.npc_id')
+        $drops = $this->database()->table('drops as d')->leftJoin('npcs as n', 'n.id', '=', 'd.npc_id')
             ->leftJoin('items as source_item', 'source_item.id', '=', 'd.source_item_id')->where('d.item_id', $itemId)
             ->orderBy('n.display_name')->get([
                 'd.global_id', 'd.source_type', 'n.global_id as npc_global_id', 'n.display_name as npc_name',
                 'source_item.global_id as source_item_global_id', 'source_item.display_name as source_item_name',
                 'd.unresolved_source_name', 'd.quantity_min', 'd.quantity_max', 'd.chance',
                 'd.chance_raw', 'd.difficulty', 'd.condition_text', 'd.conditions_json', 'd.raw_json',
-            ])->map(fn (stdClass $drop): array => $this->objectWithDecodedJson($drop, ['conditions_json', 'raw_json']));
+            ]);
+        $sourceItemIds = [];
+        foreach ($drops as $drop) {
+            if (is_string($drop->source_item_global_id) && $drop->source_item_global_id !== '') {
+                $sourceItemIds[] = $drop->source_item_global_id;
+            }
+        }
+        $sourceItemAssets = $this->assets->forItems($sourceItemIds);
+        $hydratedDrops = [];
+
+        foreach ($drops as $drop) {
+            $row = $this->objectWithDecodedJson($drop, ['conditions_json', 'raw_json']);
+            $sourceItemId = (string) ($row['source_item_global_id'] ?? '');
+            $row['source_item_icon'] = $sourceItemId !== '' ? ($sourceItemAssets[$sourceItemId] ?? null) : null;
+            $row['npc_image_url'] = $this->wikiImageUrl(
+                (string) ($row['npc_name'] ?? ''),
+                (string) ($row['npc_global_id'] ?? '')
+            );
+
+            $hydratedDrops[] = $row;
+        }
+
+        return $hydratedDrops;
     }
 
     /**
@@ -451,6 +473,13 @@ class GameCatalogService
                 'ingredient.global_id as item_global_id', 'ingredient.display_name as item_name',
                 'rg.group_key as recipe_group_key', 'rg.name as recipe_group_name',
             ])->groupBy('recipe_id');
+        $ingredientItemIds = $ingredients->flatten(1)->pluck('item_global_id')
+            ->filter(static fn (mixed $globalId): bool => is_string($globalId) && $globalId !== '')
+            ->values()->all();
+        $resultItemIds = $recipes->pluck('result_global_id')
+            ->filter(static fn (mixed $globalId): bool => is_string($globalId) && $globalId !== '')
+            ->values()->all();
+        $recipeAssets = $this->assets->forItems(array_values(array_unique([...$ingredientItemIds, ...$resultItemIds])));
         $stations = $db->table('recipe_stations as rs')
             ->join('crafting_stations as station', 'station.id', '=', 'rs.station_id')
             ->whereIn('rs.recipe_id', $recipeIds)->orderBy('station.name')
@@ -472,7 +501,16 @@ class GameCatalogService
             $recipeData = (array) $recipe;
             $id = (int) $recipeData['id'];
             $data = $this->objectWithDecodedJson($recipe, ['raw_json']);
-            $data['ingredients'] = collect($ingredients->get($id, collect()))->values()->all();
+            $resultGlobalId = (string) ($data['result_global_id'] ?? '');
+            $data['result_icon'] = $resultGlobalId !== '' ? ($recipeAssets[$resultGlobalId] ?? null) : null;
+            $data['ingredients'] = collect($ingredients->get($id, collect()))
+                ->map(function (stdClass $ingredient) use ($recipeAssets): array {
+                    $row = (array) $ingredient;
+                    $ingredientGlobalId = (string) ($row['item_global_id'] ?? '');
+                    $row['icon'] = $ingredientGlobalId !== '' ? ($recipeAssets[$ingredientGlobalId] ?? null) : null;
+
+                    return $row;
+                })->values()->all();
             $data['stations'] = collect($stations->get($id, collect()))->values()->all();
             $data['conditions'] = collect($conditions->get($id, collect()))
                 ->map(fn (stdClass $condition): array => $this->objectWithDecodedJson($condition, ['value_json']))->values()->all();
@@ -481,6 +519,21 @@ class GameCatalogService
         }
 
         return $result;
+    }
+
+    private function wikiImageUrl(string $name, string $globalId): ?string
+    {
+        $name = trim($name);
+        if ($name === '') {
+            return null;
+        }
+
+        $host = str_starts_with($globalId, 'terraria:')
+            ? 'terraria.wiki.gg'
+            : 'calamitymod.wiki.gg';
+        $fileName = str_replace(' ', '_', $name).'.png';
+
+        return "https://{$host}/wiki/Special:Redirect/file/".rawurlencode($fileName);
     }
 
     /** @return Collection<int, array<string, mixed>> */

@@ -560,50 +560,138 @@ function RecipeDetails({
     records: Array<Record<string, unknown>>;
     usedIn?: boolean;
 }) {
-    const cards = records.map((record, index): PlayerInfoCard => {
-        const ingredients = Array.isArray(record.ingredients)
-            ? (record.ingredients as Array<Record<string, unknown>>)
-            : [];
-        const stations = Array.isArray(record.stations)
-            ? (record.stations as Array<Record<string, unknown>>)
-            : [];
-        const bullets = ingredients.map((ingredient) => {
-            const name =
-                textValue(ingredient.item_name) ??
-                textValue(ingredient.recipe_group_name) ??
-                textValue(ingredient.unresolved_name) ??
-                'Ingrediente';
-            const amount = Number(ingredient.amount ?? 1);
+    if (records.length === 0) {
+        return null;
+    }
 
-            return `${Number.isFinite(amount) ? amount : 1}× ${name}`;
-        });
-        const stationNames = stations
-            .map((station) => textValue(station.name))
-            .filter((name): name is string => name !== null);
-        const rows: PlayerInfoCard['rows'] = [];
+    return (
+        <section>
+            <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                {title} <span className="text-[#81768f]">({records.length})</span>
+            </h3>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+                {records.map((record, index) => {
+                    const ingredients = Array.isArray(record.ingredients)
+                        ? (record.ingredients as Array<Record<string, unknown>>)
+                        : [];
+                    const stations = Array.isArray(record.stations)
+                        ? (record.stations as Array<Record<string, unknown>>)
+                        : [];
+                    const stationNames = stations
+                        .map((station) => textValue(station.name))
+                        .filter((name): name is string => name !== null);
+                    const resultAmount = Number(record.result_amount ?? 1);
+                    const resultName =
+                        textValue(record.result_name) ??
+                        (usedIn ? 'Item produzido' : `Receita ${index + 1}`);
+                    const recipeTitle = usedIn
+                        ? resultName
+                        : `Receita ${index + 1}`;
 
-        if (stationNames.length > 0) {
-            rows.push({ label: 'Estação', value: stationNames.join(', ') });
-        }
+                    return (
+                        <article
+                            key={`recipe-${String(record.global_id ?? index)}`}
+                            className="min-w-0 overflow-hidden rounded-lg border border-[#4b405f] bg-[#111827] p-4"
+                        >
+                            <div className="flex min-w-0 items-start gap-3">
+                                <RecordIcon
+                                    icon={record.result_icon}
+                                    label={resultName}
+                                    displaySize={38}
+                                />
+                                <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <strong className="block [overflow-wrap:anywhere] break-words text-sm text-[#fff8dc]">
+                                            {recipeTitle}
+                                        </strong>
+                                        {Boolean(record.is_historical) && (
+                                            <span className="rounded border border-[#d7a84b]/30 bg-[#d7a84b]/10 px-2 py-0.5 text-[9px] font-bold text-[#e8cf8b] uppercase">
+                                                Receita antiga
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="mt-1 text-[10px] text-[#81768f]">
+                                        {usedIn ? 'Produz' : 'Resultado'}:{' '}
+                                        <span className="font-bold text-[#c9c1d7]">
+                                            {resultName}
+                                            {Number.isFinite(resultAmount) &&
+                                            resultAmount > 1
+                                                ? ` x${resultAmount}`
+                                                : ''}
+                                        </span>
+                                    </p>
+                                    {stationNames.length > 0 && (
+                                        <p className="mt-1 text-[10px] text-[#81768f]">
+                                            Estação:{' '}
+                                            <span className="font-bold text-[#c9c1d7]">
+                                                {stationNames.join(', ')}
+                                            </span>
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
 
-        const resultAmount = Number(record.result_amount ?? 1);
+                            {ingredients.length > 0 && (
+                                <div className="mt-4 border-l border-[#6f5832] pl-4">
+                                    <p className="mb-2 text-[9px] font-black tracking-wider text-[#d7a84b] uppercase">
+                                        Craft tree
+                                    </p>
+                                    <div className="grid gap-2 min-[520px]:grid-cols-2">
+                                        {ingredients.map(
+                                            (ingredient, ingredientIndex) => {
+                                                const name =
+                                                    textValue(
+                                                        ingredient.item_name,
+                                                    ) ??
+                                                    textValue(
+                                                        ingredient.recipe_group_name,
+                                                    ) ??
+                                                    textValue(
+                                                        ingredient.unresolved_name,
+                                                    ) ??
+                                                    'Ingrediente';
+                                                const amount = Number(
+                                                    ingredient.amount ?? 1,
+                                                );
 
-        if (usedIn && Number.isFinite(resultAmount) && resultAmount > 1) {
-            rows.push({ label: 'Produz', value: String(resultAmount) });
-        }
-
-        return {
-            key: `recipe-${String(record.global_id ?? index)}`,
-            title: usedIn
-                ? (textValue(record.result_name) ?? 'Item produzido')
-                : `Receita ${index + 1}`,
-            badge: record.is_historical ? 'Receita antiga' : undefined,
-            rows,
-            bullets,
-        };
-    });
-
-    return <PlayerInfoSection title={title} cards={cards} />;
+                                                return (
+                                                    <div
+                                                        key={`${String(ingredient.item_global_id ?? ingredient.recipe_group_key ?? name)}-${ingredientIndex}`}
+                                                        className="flex min-w-0 items-center gap-2 rounded-md border border-white/10 bg-black/20 p-2"
+                                                    >
+                                                        <RecordIcon
+                                                            icon={
+                                                                ingredient.icon
+                                                            }
+                                                            label={name}
+                                                            displaySize={30}
+                                                        />
+                                                        <span className="min-w-0">
+                                                            <strong className="block truncate text-xs text-[#fff8dc]">
+                                                                {name}
+                                                            </strong>
+                                                            <small className="text-[10px] font-bold text-[#e8cf8b]">
+                                                                {Number.isFinite(
+                                                                    amount,
+                                                                )
+                                                                    ? amount
+                                                                    : 1}
+                                                                x
+                                                            </small>
+                                                        </span>
+                                                    </div>
+                                                );
+                                            },
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </article>
+                    );
+                })}
+            </div>
+        </section>
+    );
 }
 
 function formatDropChance(record: Record<string, unknown>): string | null {
@@ -625,46 +713,94 @@ function formatDropChance(record: Record<string, unknown>): string | null {
 }
 
 function DropDetails({ records }: { records: Array<Record<string, unknown>> }) {
-    const cards = records.map((record, index): PlayerInfoCard => {
-        const minimum = Number(record.quantity_min ?? 1);
-        const maximum = Number(record.quantity_max ?? minimum);
-        const quantity =
-            minimum === maximum ? String(minimum) : `${minimum}–${maximum}`;
-        const rows: PlayerInfoCard['rows'] = [];
-        const chance = formatDropChance(record);
+    if (records.length === 0) {
+        return null;
+    }
 
-        if (chance) {
-            rows.push({ label: 'Chance', value: chance });
-        }
+    return (
+        <section>
+            <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
+                Drops <span className="text-[#81768f]">({records.length})</span>
+            </h3>
+            <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+                {records.map((record, index) => {
+                    const minimum = Number(record.quantity_min ?? 1);
+                    const maximum = Number(record.quantity_max ?? minimum);
+                    const quantity =
+                        minimum === maximum
+                            ? String(minimum)
+                            : `${minimum}–${maximum}`;
+                    const chance = formatDropChance(record);
+                    const difficulty = textValue(record.difficulty);
+                    const condition = textValue(record.condition_text);
+                    const sourceName =
+                        textValue(record.npc_name) ??
+                        textValue(record.source_item_name) ??
+                        textValue(record.unresolved_source_name) ??
+                        'Fonte desconhecida';
 
-        if (Number.isFinite(minimum) && Number.isFinite(maximum)) {
-            rows.push({ label: 'Quantidade', value: quantity });
-        }
-
-        const difficulty = textValue(record.difficulty);
-
-        if (difficulty) {
-            rows.push({ label: 'Dificuldade', value: difficulty });
-        }
-
-        const condition = textValue(record.condition_text);
-
-        if (condition) {
-            rows.push({ label: 'Condição', value: condition });
-        }
-
-        return {
-            key: `drop-${String(record.global_id ?? index)}`,
-            title:
-                textValue(record.npc_name) ??
-                textValue(record.source_item_name) ??
-                textValue(record.unresolved_source_name) ??
-                'Fonte desconhecida',
-            rows,
-        };
-    });
-
-    return <PlayerInfoSection title="Drops" cards={cards} />;
+                    return (
+                        <article
+                            key={`drop-${String(record.global_id ?? index)}`}
+                            className="min-w-0 overflow-hidden rounded-lg border border-[#4b405f] bg-[#111827] p-4"
+                        >
+                            <div className="flex min-w-0 items-start gap-3">
+                                <RecordIcon
+                                    icon={record.source_item_icon}
+                                    imageUrl={textValue(record.npc_image_url)}
+                                    label={sourceName}
+                                    displaySize={38}
+                                />
+                                <div className="min-w-0 flex-1">
+                                    <strong className="block [overflow-wrap:anywhere] break-words text-sm text-[#fff8dc]">
+                                        {sourceName}
+                                    </strong>
+                                    <dl className="mt-2 grid gap-1.5 text-xs">
+                                        {chance && (
+                                            <div className="flex items-start justify-between gap-3 border-t border-white/5 pt-1.5">
+                                                <dt className="font-bold text-[#81768f] uppercase">
+                                                    Chance
+                                                </dt>
+                                                <dd className="text-right text-[#c9c1d7]">
+                                                    {chance}
+                                                </dd>
+                                            </div>
+                                        )}
+                                        {Number.isFinite(minimum) &&
+                                            Number.isFinite(maximum) && (
+                                                <div className="flex items-start justify-between gap-3 border-t border-white/5 pt-1.5">
+                                                    <dt className="font-bold text-[#81768f] uppercase">
+                                                        Quantidade
+                                                    </dt>
+                                                    <dd className="text-right text-[#c9c1d7]">
+                                                        {quantity}
+                                                    </dd>
+                                                </div>
+                                            )}
+                                        {difficulty && (
+                                            <div className="flex items-start justify-between gap-3 border-t border-white/5 pt-1.5">
+                                                <dt className="font-bold text-[#81768f] uppercase">
+                                                    Dificuldade
+                                                </dt>
+                                                <dd className="text-right text-[#c9c1d7]">
+                                                    {difficulty}
+                                                </dd>
+                                            </div>
+                                        )}
+                                    </dl>
+                                    {condition && (
+                                        <p className="mt-3 rounded border border-white/10 bg-black/20 p-2 text-[11px] leading-relaxed text-[#c9c1d7]">
+                                            {condition}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        </article>
+                    );
+                })}
+            </div>
+        </section>
+    );
 }
 
 function AcquisitionDetails({
@@ -716,31 +852,6 @@ function ShopDetails({ records }: { records: Array<Record<string, unknown>> }) {
     });
 
     return <PlayerInfoSection title="Onde comprar" cards={cards} />;
-}
-
-function RecommendationDetails({
-    records,
-}: {
-    records: Array<Record<string, unknown>>;
-}) {
-    const cards = records.map((record, index): PlayerInfoCard => ({
-        key: `recommendation-${String(record.planner_key ?? '')}-${String(record.milestone_key ?? index)}`,
-        title: textValue(record.archetype_name) ?? 'Build recomendada',
-        rows: [
-            {
-                label: 'Momento',
-                value: textValue(record.milestone_name) ?? 'Não informado',
-            },
-            {
-                label: 'Uso',
-                value: formatLabel(
-                    textValue(record.slot_type) ?? 'equipamento',
-                ),
-            },
-        ],
-    }));
-
-    return <PlayerInfoSection title="Recomendado para" cards={cards} />;
 }
 
 function UnlockRequirements({
@@ -890,6 +1001,55 @@ function ItemIcon({
         >
             <ItemSprite item={item} displaySize={size === 'sm' ? 28 : 40} />
         </div>
+    );
+}
+
+function iconAssetValue(value: unknown): IconAsset | null {
+    if (!value || typeof value !== 'object') {
+        return null;
+    }
+
+    const asset = value as Partial<IconAsset>;
+
+    return typeof asset.url === 'string' ? (asset as IconAsset) : null;
+}
+
+function RecordIcon({
+    icon,
+    imageUrl,
+    label,
+    displaySize = 32,
+}: {
+    icon?: unknown;
+    imageUrl?: string | null;
+    label: string;
+    displaySize?: number;
+}) {
+    const asset = iconAssetValue(icon);
+
+    return (
+        <span className="grid size-12 shrink-0 place-items-center overflow-hidden rounded-md border border-[#4b405f] bg-black/25 p-1">
+            {asset ? (
+                <ItemSprite
+                    item={{
+                        global_id: label,
+                        display_name: label,
+                        icon: asset,
+                    }}
+                    displaySize={displaySize}
+                />
+            ) : imageUrl ? (
+                <img
+                    src={imageUrl}
+                    alt={label}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
+                />
+            ) : (
+                <Sparkles className="size-5 text-[#81768f]" />
+            )}
+        </span>
     );
 }
 
@@ -1276,9 +1436,6 @@ function ItemDetailDialog({
                                 title="Usado em receitas"
                                 records={detail.used_in_recipes}
                                 usedIn
-                            />
-                            <RecommendationDetails
-                                records={detail.planner?.recommendations ?? []}
                             />
                         </div>
                     </>
