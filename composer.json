@@ -8,7 +8,20 @@
         "framework"
     ],
     "license": "MIT",
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../crow-vault-canvas",
+            "options": {
+                "symlink": true,
+                "versions": {
+                    "caiquerechi/crow-vault-canvas": "dev-main"
+                }
+            }
+        }
+    ],
     "require": {
+        "caiquerechi/crow-vault-canvas": "dev-main",
         "php": "^8.3",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "32586e3f4bc362f7f765e9f96f79a56d",
+    "content-hash": "323e79deb42555832bfb73be821be74f",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -119,6 +119,54 @@
                 }
             ],
             "time": "2026-06-14T18:21:03+00:00"
+        },
+        {
+            "name": "caiquerechi/crow-vault-canvas",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "../crow-vault-canvas",
+                "reference": "1e6b9901190c02ab84f4d9593116b2cb394ea0b3"
+            },
+            "require": {
+                "inertiajs/inertia-laravel": "^3.3.1",
+                "laravel/framework": "^13.34.0",
+                "php": "^8.3"
+            },
+            "require-dev": {
+                "orchestra/testbench": "^11.3.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "CrowVaultCanvas\\CrowVaultCanvasServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "CrowVaultCanvas\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "CrowVaultCanvas\\Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "phpunit"
+                ]
+            },
+            "license": [
+                "MIT"
+            ],
+            "description": "A Laravel and React knowledge canvas package for Rechi OS.",
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         },
         {
             "name": "carbonphp/carbon-doctrine-types",
@@ -10858,7 +10906,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "caiquerechi/crow-vault-canvas": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
