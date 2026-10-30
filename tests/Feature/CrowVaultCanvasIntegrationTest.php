@@ -51,7 +51,11 @@ class CrowVaultCanvasIntegrationTest extends TestCase
                 ->has('vault.universes', 1)
                 ->where('vault.universes.0.name', 'Meu Universo')
                 ->has('vault.universes.0.contexts', 1)
-                ->where('vault.universes.0.contexts.0.name', 'Primeiro Contexto'));
+                ->where('vault.universes.0.contexts.0.name', 'Primeiro Contexto')
+                ->where('workspace.viewport.x', 120)
+                ->where('workspace.viewport.y', 120)
+                ->where('workspace.viewport.zoom', 0.65)
+                ->where('workspace.focusEntityId', null));
     }
 
     public function test_rf_14_rejects_document_writes_without_write_permission(): void
@@ -101,5 +105,48 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->getJson("/vault/documents/{$entityId}")
             ->assertOk()
             ->assertJsonPath('document.content', $markdown);
+    }
+
+    public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()->where('kind', KnowledgeContext::KIND_CONTEXT)->firstOrFail();
+
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+
+        $entityId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+
+        $this->actingAs($user)
+            ->patchJson('/vault/workspace', [
+                'viewport' => [
+                    'x' => -180.75,
+                    'y' => 41.5,
+                    'zoom' => 1.6,
+                ],
+                'focus_entity_id' => $entityId,
+            ])
+            ->assertOk()
+            ->assertJsonPath('workspace.focusEntityId', $entityId);
+
+        $this->actingAs($user)
+            ->get('/vault')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('workspace.viewport.x', -180.75)
+                ->where('workspace.viewport.y', 41.5)
+                ->where('workspace.viewport.zoom', 1.6)
+                ->where('workspace.focusEntityId', $entityId));
+        $this->assertDatabaseHas('cvc_documents', [
+            'entity_id' => $entityId,
+            'revision' => 1,
+        ]);
     }
 }
