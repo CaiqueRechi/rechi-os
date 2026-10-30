@@ -30,6 +30,8 @@ createInertiaApp({
                 return null;
             case name === 'salem/game':
                 return null;
+            case name === 'cvc/vault':
+                return null;
             case name.startsWith('auth/'):
                 return AuthLayout;
             case name.startsWith('settings/'):
