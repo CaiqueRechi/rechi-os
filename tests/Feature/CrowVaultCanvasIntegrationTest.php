@@ -32,6 +32,8 @@ class CrowVaultCanvasIntegrationTest extends TestCase
     {
         $user = User::factory()->create();
 
+        $this->artisan('cvc:initialize')->assertSuccessful();
+
         ScreenAccessPermission::query()->create([
             'user_id' => $user->id,
             'screen_key' => 'vault',
@@ -41,6 +43,11 @@ class CrowVaultCanvasIntegrationTest extends TestCase
         $this->actingAs($user)
             ->get('/vault')
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->component('cvc/vault', shouldExist: false));
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('cvc/vault', shouldExist: false)
+                ->where('vault.id', config('crow-vault-canvas.vault.id'))
+                ->where('vault.name', 'Crow Vault Canvas')
+                ->has('vault.universes', 1)
+                ->where('vault.universes.0.name', 'Meu Universo'));
     }
 }
