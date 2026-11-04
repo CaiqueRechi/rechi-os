@@ -105,6 +105,14 @@ class CrowVaultCanvasIntegrationTest extends TestCase
                 ],
             ])
             ->assertForbidden();
+        $this->actingAs($user)
+            ->postJson('/vault/perspectives/019a34a8-0c7e-71ec-88ca-c4fb55740104/versions', [
+                'name' => 'Sem permissão',
+            ])
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->postJson('/vault/versions/019a34a8-0c7e-71ec-88ca-c4fb55740105/restore')
+            ->assertForbidden();
     }
 
     public function test_rf_05_explorer_exposes_one_authorized_entity_in_multiple_contexts(): void
@@ -382,6 +390,56 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             'position_x' => 90.5,
             'is_pinned' => true,
         ]);
+    }
+
+    public function test_rf_10_restores_a_named_version_with_a_recovery_point(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+        $perspective = Perspective::query()->firstOrFail();
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+        $entityId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $this->actingAs($user)
+            ->patchJson("/vault/documents/{$entityId}", [
+                'content' => '# marco inicial',
+                'revision' => 1,
+            ])
+            ->assertOk();
+        $versionId = $this->actingAs($user)
+            ->postJson("/vault/perspectives/{$perspective->getKey()}/versions", [
+                'name' => 'Marco inicial',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('version.kind', 'named')
+            ->json('version.id');
+        $this->actingAs($user)
+            ->patchJson("/vault/documents/{$entityId}", [
+                'content' => '# estado posterior',
+                'revision' => 2,
+            ])
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->postJson("/vault/versions/{$versionId}/restore")
+            ->assertOk()
+            ->assertJsonPath('restoredVersion.id', $versionId)
+            ->assertJsonPath('recoveryVersion.kind', 'recovery');
+        $this->actingAs($user)
+            ->getJson("/vault/documents/{$entityId}")
+            ->assertOk()
+            ->assertJsonPath('document.content', '# marco inicial')
+            ->assertJsonPath('document.revision', 2);
+        $this->assertDatabaseCount('cvc_versions', 2);
     }
 
     public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
