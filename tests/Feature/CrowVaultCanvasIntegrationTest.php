@@ -79,6 +79,21 @@ class CrowVaultCanvasIntegrationTest extends TestCase
                 'properties' => [],
             ])
             ->assertForbidden();
+        $this->actingAs($user)
+            ->postJson("/vault/contexts/{$context->getKey()}/entities", [
+                'entity_id' => '019a34a8-0c7e-71ec-88ca-c4fb55740102',
+            ])
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->postJson('/vault/relations', [
+                'source_entity_id' => '019a34a8-0c7e-71ec-88ca-c4fb55740102',
+                'target_entity_id' => '019a34a8-0c7e-71ec-88ca-c4fb55740103',
+                'context_id' => null,
+                'type' => null,
+                'directed' => false,
+                'properties' => [],
+            ])
+            ->assertForbidden();
     }
 
     public function test_rf_05_explorer_exposes_one_authorized_entity_in_multiple_contexts(): void
@@ -199,7 +214,6 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertJsonPath('document.id', $entityId)
             ->assertJsonPath('document.content', $markdown)
             ->assertJsonPath('document.revision', 2);
-
         $this->actingAs($user)
             ->patchJson("/vault/entities/{$entityId}", [
                 'type' => 'inválido',
@@ -208,6 +222,89 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertUnprocessable();
         $this->assertDatabaseCount('cvc_entities', 1);
         $this->assertDatabaseCount('cvc_documents', 1);
+    }
+
+    public function test_rf_08_manages_context_membership_layout_and_relations(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $firstContext = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+        $secondContext = KnowledgeContext::query()->create([
+            'vault_id' => $firstContext->vault_id,
+            'parent_id' => $firstContext->parent_id,
+            'kind' => KnowledgeContext::KIND_CONTEXT,
+            'name' => 'Segundo Contexto',
+            'sort_order' => 1,
+        ]);
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+
+        $sourceId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $firstContext->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $targetId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $firstContext->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+
+        $this->actingAs($user)
+            ->postJson("/vault/contexts/{$secondContext->getKey()}/entities", [
+                'entity_id' => $sourceId,
+            ])
+            ->assertOk()
+            ->assertJsonPath('attached', true);
+        $this->actingAs($user)
+            ->patchJson("/vault/contexts/{$firstContext->getKey()}/entities/{$sourceId}/layout", [
+                'position' => ['x' => 180.5, 'y' => 90.25],
+                'pinned' => true,
+            ])
+            ->assertOk();
+        $relationId = $this->actingAs($user)
+            ->postJson('/vault/relations', [
+                'source_entity_id' => $sourceId,
+                'target_entity_id' => $targetId,
+                'context_id' => $firstContext->getKey(),
+                'type' => 'depends_on',
+                'directed' => true,
+                'properties' => [],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('relation.sourceEntityId', $sourceId)
+            ->assertJsonPath('relation.targetEntityId', $targetId)
+            ->json('relation.id');
+
+        $this->actingAs($user)
+            ->postJson('/vault/relations', [
+                'source_entity_id' => $sourceId,
+                'target_entity_id' => $targetId,
+                'context_id' => $firstContext->getKey(),
+                'type' => 'depends_on',
+                'directed' => true,
+                'properties' => [],
+            ])
+            ->assertUnprocessable();
+        $this->actingAs($user)
+            ->deleteJson("/vault/relations/{$relationId}")
+            ->assertNoContent();
+
+        $this->assertDatabaseHas('cvc_context_entity', [
+            'context_id' => $secondContext->getKey(),
+            'entity_id' => $sourceId,
+        ]);
+        $this->assertDatabaseHas('cvc_context_entity', [
+            'context_id' => $firstContext->getKey(),
+            'entity_id' => $sourceId,
+            'position_x' => 180.5,
+            'position_y' => 90.25,
+            'is_pinned' => true,
+        ]);
+        $this->assertSoftDeleted('cvc_relations', ['id' => $relationId]);
     }
 
     public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
