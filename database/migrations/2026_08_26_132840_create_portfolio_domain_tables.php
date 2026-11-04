@@ -173,6 +173,10 @@ return new class extends Migration
         Schema::dropIfExists('profiles');
 
         Schema::table('users', function (Blueprint $table) {
+            $table->dropIndex(['is_admin']);
+        });
+
+        Schema::table('users', function (Blueprint $table) {
             $table->dropColumn('is_admin');
         });
     }

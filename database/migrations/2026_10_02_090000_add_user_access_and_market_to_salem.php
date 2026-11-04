@@ -132,6 +132,10 @@ return new class extends Migration
         Schema::dropIfExists('screen_access_permissions');
 
         Schema::table('salem_players', function (Blueprint $table) {
+            $table->dropUnique(['user_id']);
+        });
+
+        Schema::table('salem_players', function (Blueprint $table) {
             $table->dropConstrainedForeignId('user_id');
         });
     }
