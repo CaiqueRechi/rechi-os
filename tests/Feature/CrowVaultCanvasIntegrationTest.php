@@ -73,6 +73,12 @@ class CrowVaultCanvasIntegrationTest extends TestCase
         $this->actingAs($user)
             ->postJson('/vault/documents', ['context_id' => $context->getKey()])
             ->assertForbidden();
+        $this->actingAs($user)
+            ->patchJson('/vault/entities/019a34a8-0c7e-71ec-88ca-c4fb55740102', [
+                'type' => 'registro',
+                'properties' => [],
+            ])
+            ->assertForbidden();
     }
 
     public function test_rf_05_explorer_exposes_one_authorized_entity_in_multiple_contexts(): void
@@ -146,6 +152,62 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->getJson("/vault/documents/{$entityId}")
             ->assertOk()
             ->assertJsonPath('document.content', $markdown);
+    }
+
+    public function test_rf_07_updates_properties_without_changing_identity_or_content(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+
+        $entityId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $markdown = "# Identidade estável\n\nConteúdo canônico.\n";
+        $this->actingAs($user)
+            ->patchJson("/vault/documents/{$entityId}", [
+                'content' => $markdown,
+                'revision' => 1,
+            ])
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->patchJson("/vault/entities/{$entityId}", [
+                'type' => 'referência',
+                'properties' => [
+                    'status' => 'ativo',
+                    'prioridade' => 2,
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('entity.id', $entityId)
+            ->assertJsonPath('entity.entityType', 'referência')
+            ->assertJsonPath('entity.properties.status', 'ativo')
+            ->assertJsonPath('entity.properties.prioridade', 2);
+        $this->actingAs($user)
+            ->getJson("/vault/documents/{$entityId}")
+            ->assertOk()
+            ->assertJsonPath('document.id', $entityId)
+            ->assertJsonPath('document.content', $markdown)
+            ->assertJsonPath('document.revision', 2);
+
+        $this->actingAs($user)
+            ->patchJson("/vault/entities/{$entityId}", [
+                'type' => 'inválido',
+                'properties' => ['nested' => ['não permitido']],
+            ])
+            ->assertUnprocessable();
+        $this->assertDatabaseCount('cvc_entities', 1);
+        $this->assertDatabaseCount('cvc_documents', 1);
     }
 
     public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
