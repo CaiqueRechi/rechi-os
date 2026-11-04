@@ -6,6 +6,7 @@ use App\Enums\ScreenAccessLevel;
 use App\Models\ScreenAccessPermission;
 use App\Models\User;
 use CrowVaultCanvas\Domain\Knowledge\Models\KnowledgeContext;
+use CrowVaultCanvas\Domain\Knowledge\Models\Perspective;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -92,6 +93,16 @@ class CrowVaultCanvasIntegrationTest extends TestCase
                 'type' => null,
                 'directed' => false,
                 'properties' => [],
+            ])
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->postJson('/vault/perspectives', [
+                'name' => 'Sem permissão',
+                'source_perspective_id' => null,
+                'filters' => [
+                    'context_ids' => [],
+                    'entity_types' => [],
+                ],
             ])
             ->assertForbidden();
     }
@@ -305,6 +316,72 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             'is_pinned' => true,
         ]);
         $this->assertSoftDeleted('cvc_relations', ['id' => $relationId]);
+    }
+
+    public function test_rf_09_keeps_a_derived_perspective_independent(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+        $source = Perspective::query()->firstOrFail();
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+        $entityId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+
+        $this->actingAs($user)
+            ->patchJson("/vault/perspectives/{$source->getKey()}", [
+                'name' => 'Origem',
+                'filters' => [
+                    'context_ids' => [$context->getKey()],
+                    'entity_types' => [],
+                ],
+            ])
+            ->assertOk();
+        $this->actingAs($user)
+            ->patchJson("/vault/perspectives/{$source->getKey()}/contexts/{$context->getKey()}/entities/{$entityId}/layout", [
+                'position' => ['x' => 90.5, 'y' => 140.25],
+                'pinned' => true,
+            ])
+            ->assertOk();
+        $derivedId = $this->actingAs($user)
+            ->postJson('/vault/perspectives', [
+                'name' => 'Derivada',
+                'source_perspective_id' => $source->getKey(),
+                'filters' => [
+                    'context_ids' => [],
+                    'entity_types' => [],
+                ],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('perspective.layouts.0.isPinned', true)
+            ->json('perspective.id');
+        $this->actingAs($user)
+            ->patchJson("/vault/perspectives/{$derivedId}", [
+                'name' => 'Derivada alterada',
+                'filters' => [
+                    'context_ids' => [],
+                    'entity_types' => ['referência'],
+                ],
+            ])
+            ->assertOk();
+
+        $source->refresh();
+        self::assertSame('Origem', $source->name);
+        self::assertSame([$context->getKey()], $source->filters['context_ids']);
+        $this->assertDatabaseHas('cvc_perspective_layouts', [
+            'perspective_id' => $source->getKey(),
+            'entity_id' => $entityId,
+            'position_x' => 90.5,
+            'is_pinned' => true,
+        ]);
     }
 
     public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
