@@ -75,6 +75,47 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_rf_05_explorer_exposes_one_authorized_entity_in_multiple_contexts(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $universe = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_UNIVERSE)
+            ->firstOrFail();
+        $firstContext = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+        $secondContext = KnowledgeContext::query()->create([
+            'vault_id' => $universe->vault_id,
+            'parent_id' => $universe->getKey(),
+            'kind' => KnowledgeContext::KIND_CONTEXT,
+            'name' => 'Contexto Compartilhado',
+            'sort_order' => 1,
+        ]);
+
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+
+        $entityId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $firstContext->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $secondContext->entities()->attach($entityId);
+
+        $this->actingAs($user)
+            ->get('/vault')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vault.universes.0.contexts', 2)
+                ->where('vault.universes.0.contexts.0.documents.0.id', $entityId)
+                ->where('vault.universes.0.contexts.1.documents.0.id', $entityId));
+        $this->assertDatabaseCount('cvc_entities', 1);
+        $this->assertDatabaseCount('cvc_context_entity', 2);
+    }
+
     public function test_rf_03_persists_markdown_through_the_rechi_os_boundary(): void
     {
         $user = User::factory()->create();
