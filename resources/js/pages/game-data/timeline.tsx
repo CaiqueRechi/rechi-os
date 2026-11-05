@@ -360,7 +360,8 @@ function DamageSimulatorForm({
             (1 - form.percentArmorPenetration / 100),
     );
     const defenseBlocked = effectiveDefense / 2;
-    const normalHit = Math.max(1, buffedDamage - defenseBlocked) *
+    const normalHit =
+        Math.max(1, buffedDamage - defenseBlocked) *
         (1 - form.targetReduction / 100);
     const criticalHit = normalHit * Math.max(1, form.criticalMultiplier);
     const criticalChance = Math.max(0, Math.min(100, form.criticalAdditional));
@@ -382,10 +383,7 @@ function DamageSimulatorForm({
     const targetName =
         step.target?.npc_name ?? step.target?.name ?? step.milestone_name;
 
-    function updateField(
-        key: keyof typeof form,
-        value: string,
-    ): void {
+    function updateField(key: keyof typeof form, value: string): void {
         setForm((current) => ({
             ...current,
             [key]: Number.isFinite(Number(value)) ? Number(value) : 0,
@@ -404,7 +402,11 @@ function DamageSimulatorForm({
         { key: 'flatArmorPenetration', label: 'Penetração de armadura' },
         { key: 'percentArmorPenetration', label: 'Penetração percentual (%)' },
         { key: 'criticalAdditional', label: 'Crítico total (%)' },
-        { key: 'criticalMultiplier', label: 'Multiplicador crítico', step: '0.1' },
+        {
+            key: 'criticalMultiplier',
+            label: 'Multiplicador crítico',
+            step: '0.1',
+        },
         { key: 'attacksPerSecond', label: 'Acertos por segundo', step: '0.05' },
     ];
 
@@ -567,7 +569,8 @@ function RecipeDetails({
     return (
         <section>
             <h3 className="mb-3 text-sm font-black tracking-wider text-[#e8cf8b] uppercase">
-                {title} <span className="text-[#81768f]">({records.length})</span>
+                {title}{' '}
+                <span className="text-[#81768f]">({records.length})</span>
             </h3>
             <div className="grid min-w-0 gap-3 lg:grid-cols-2">
                 {records.map((record, index) => {
@@ -601,7 +604,7 @@ function RecipeDetails({
                                 />
                                 <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <strong className="block [overflow-wrap:anywhere] break-words text-sm text-[#fff8dc]">
+                                        <strong className="block text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
                                             {recipeTitle}
                                         </strong>
                                         {Boolean(record.is_historical) && (
@@ -752,7 +755,7 @@ function DropDetails({ records }: { records: Array<Record<string, unknown>> }) {
                                     displaySize={38}
                                 />
                                 <div className="min-w-0 flex-1">
-                                    <strong className="block [overflow-wrap:anywhere] break-words text-sm text-[#fff8dc]">
+                                    <strong className="block text-sm [overflow-wrap:anywhere] break-words text-[#fff8dc]">
                                         {sourceName}
                                     </strong>
                                     <dl className="mt-2 grid gap-1.5 text-xs">
