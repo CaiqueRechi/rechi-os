@@ -19,6 +19,8 @@ class CrowVaultCanvasIntegrationTest extends TestCase
     {
         $this->get('/vault')
             ->assertRedirect(route('login'));
+        $this->get('/vault/search?q=seguran%C3%A7a')
+            ->assertRedirect(route('login'));
     }
 
     public function test_rf_14_rejects_authenticated_users_without_vault_permission(): void
@@ -27,6 +29,9 @@ class CrowVaultCanvasIntegrationTest extends TestCase
 
         $this->actingAs($user)
             ->get('/vault')
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->getJson('/vault/search?q=seguran%C3%A7a')
             ->assertForbidden();
     }
 
@@ -56,7 +61,8 @@ class CrowVaultCanvasIntegrationTest extends TestCase
                 ->where('workspace.viewport.x', 120)
                 ->where('workspace.viewport.y', 120)
                 ->where('workspace.viewport.zoom', 0.65)
-                ->where('workspace.focusEntityId', null));
+                ->where('workspace.focusEntityId', null)
+                ->where('endpoints.search', route('cvc.search')));
     }
 
     public function test_rf_14_rejects_document_writes_without_write_permission(): void
@@ -241,6 +247,52 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertUnprocessable();
         $this->assertDatabaseCount('cvc_entities', 1);
         $this->assertDatabaseCount('cvc_documents', 1);
+    }
+
+    public function test_rf_06_searches_only_after_rechi_os_authorization(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+
+        $entityId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $this->actingAs($user)
+            ->patchJson("/vault/documents/{$entityId}", [
+                'content' => "# Cofre pessoal\n\nAutenticação JWT em camadas.",
+                'revision' => 1,
+            ])
+            ->assertOk();
+        $this->actingAs($user)
+            ->patchJson("/vault/entities/{$entityId}", [
+                'type' => 'referência',
+                'properties' => ['classificação' => 'confidencial'],
+                'tags' => ['segurança'],
+            ])
+            ->assertOk();
+
+        foreach (['JWT', 'referência', 'classificação', 'confidencial', 'segurança'] as $query) {
+            $response = $this->actingAs($user)
+                ->getJson('/vault/search?'.http_build_query(['q' => $query]))
+                ->assertOk();
+
+            self::assertCount(
+                1,
+                $response->json('results'),
+                "The Rechi OS search query '{$query}' did not return one result.",
+            );
+            $response->assertJsonPath('results.0.id', $entityId);
+        }
     }
 
     public function test_rf_08_manages_context_membership_layout_and_relations(): void
