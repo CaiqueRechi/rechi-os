@@ -126,7 +126,7 @@
             "dist": {
                 "type": "path",
                 "url": "../crow-vault-canvas",
-                "reference": "5479ea4cfdea65dbfee14336414206d1921b41d9"
+                "reference": "0145387a158a33aeeca2942bb8596a27f46afe4c"
             },
             "require": {
                 "inertiajs/inertia-laravel": "^3.3.1",
