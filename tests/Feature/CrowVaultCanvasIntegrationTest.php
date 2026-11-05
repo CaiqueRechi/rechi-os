@@ -22,6 +22,8 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertRedirect(route('login'));
         $this->get('/vault/search?q=seguran%C3%A7a')
             ->assertRedirect(route('login'));
+        $this->get('/vault/operations')
+            ->assertRedirect(route('login'));
         $this->get('/vault/attachments/019a34a8-0c7e-71ec-88ca-c4fb55740106')
             ->assertRedirect(route('login'));
     }
@@ -35,6 +37,9 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertForbidden();
         $this->actingAs($user)
             ->getJson('/vault/search?q=seguran%C3%A7a')
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->getJson('/vault/operations')
             ->assertForbidden();
         $this->actingAs($user)
             ->get('/vault/attachments/019a34a8-0c7e-71ec-88ca-c4fb55740106')
@@ -68,7 +73,9 @@ class CrowVaultCanvasIntegrationTest extends TestCase
                 ->where('workspace.viewport.y', 120)
                 ->where('workspace.viewport.zoom', 0.65)
                 ->where('workspace.focusEntityId', null)
-                ->where('endpoints.search', route('cvc.search')));
+                ->where('endpoints.search', route('cvc.search'))
+                ->where('endpoints.operations', route('cvc.operations.index'))
+                ->has('vault.operations', 0));
     }
 
     public function test_rf_14_rejects_document_writes_without_write_permission(): void
@@ -607,6 +614,32 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ], ['Accept' => 'application/json'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('file');
+    }
+
+    public function test_rf_13_exposes_queue_state_only_after_rechi_os_authorization(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated();
+
+        $this->actingAs($user)
+            ->getJson('/vault/operations')
+            ->assertOk()
+            ->assertJsonCount(1, 'tasks')
+            ->assertJsonPath('tasks.0.type', 'search_index')
+            ->assertJsonPath('tasks.0.status', 'succeeded')
+            ->assertJsonPath('tasks.0.progressCurrent', 1);
     }
 
     public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
