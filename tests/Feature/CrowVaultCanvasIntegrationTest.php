@@ -119,6 +119,12 @@ class CrowVaultCanvasIntegrationTest extends TestCase
         $this->actingAs($user)
             ->postJson('/vault/versions/019a34a8-0c7e-71ec-88ca-c4fb55740105/restore')
             ->assertForbidden();
+        $this->actingAs($user)
+            ->deleteJson('/vault/entities/019a34a8-0c7e-71ec-88ca-c4fb55740102')
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->postJson('/vault/trash/019a34a8-0c7e-71ec-88ca-c4fb55740102/restore')
+            ->assertForbidden();
     }
 
     public function test_rf_05_explorer_exposes_one_authorized_entity_in_multiple_contexts(): void
@@ -492,6 +498,64 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertJsonPath('document.content', '# marco inicial')
             ->assertJsonPath('document.revision', 2);
         $this->assertDatabaseCount('cvc_versions', 2);
+    }
+
+    public function test_rf_11_restores_a_trashed_entity_through_rechi_os(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+        $sourceId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $targetId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $relationId = $this->actingAs($user)
+            ->postJson('/vault/relations', [
+                'source_entity_id' => $sourceId,
+                'target_entity_id' => $targetId,
+                'context_id' => null,
+                'type' => 'depends_on',
+                'directed' => true,
+                'properties' => [],
+            ])
+            ->assertCreated()
+            ->json('relation.id');
+
+        $this->actingAs($user)
+            ->deleteJson("/vault/entities/{$sourceId}")
+            ->assertOk()
+            ->assertJsonPath('trashItem.id', $sourceId)
+            ->assertJsonPath('deletedRelationIds.0', $relationId);
+        $this->actingAs($user)
+            ->get('/vault')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('vault.universes.0.contexts.0.documents', 1)
+                ->where('vault.universes.0.contexts.0.documents.0.id', $targetId)
+                ->where('vault.trash.0.id', $sourceId));
+
+        $this->actingAs($user)
+            ->postJson("/vault/trash/{$sourceId}/restore")
+            ->assertOk()
+            ->assertJsonPath('entity.id', $sourceId)
+            ->assertJsonPath('restoredRelations.0.id', $relationId)
+            ->assertJsonCount(0, 'brokenRelations');
+        $this->actingAs($user)
+            ->getJson("/vault/documents/{$sourceId}")
+            ->assertOk()
+            ->assertJsonPath('document.id', $sourceId)
+            ->assertJsonPath('document.revision', 1);
     }
 
     public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
