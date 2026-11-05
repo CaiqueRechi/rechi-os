@@ -8,6 +8,7 @@ use App\Models\User;
 use CrowVaultCanvas\Domain\Knowledge\Models\KnowledgeContext;
 use CrowVaultCanvas\Domain\Knowledge\Models\Perspective;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -21,6 +22,8 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertRedirect(route('login'));
         $this->get('/vault/search?q=seguran%C3%A7a')
             ->assertRedirect(route('login'));
+        $this->get('/vault/attachments/019a34a8-0c7e-71ec-88ca-c4fb55740106')
+            ->assertRedirect(route('login'));
     }
 
     public function test_rf_14_rejects_authenticated_users_without_vault_permission(): void
@@ -32,6 +35,9 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertForbidden();
         $this->actingAs($user)
             ->getJson('/vault/search?q=seguran%C3%A7a')
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->get('/vault/attachments/019a34a8-0c7e-71ec-88ca-c4fb55740106')
             ->assertForbidden();
     }
 
@@ -124,6 +130,11 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertForbidden();
         $this->actingAs($user)
             ->postJson('/vault/trash/019a34a8-0c7e-71ec-88ca-c4fb55740102/restore')
+            ->assertForbidden();
+        $this->actingAs($user)
+            ->post('/vault/entities/019a34a8-0c7e-71ec-88ca-c4fb55740102/attachments', [
+                'file' => UploadedFile::fake()->createWithContent('nota.pdf', "%PDF-1.4\n%%EOF\n"),
+            ], ['Accept' => 'application/json'])
             ->assertForbidden();
     }
 
@@ -556,6 +567,46 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('document.id', $sourceId)
             ->assertJsonPath('document.revision', 1);
+    }
+
+    public function test_rf_12_validates_and_serves_private_attachments_through_rechi_os(): void
+    {
+        $user = User::factory()->create();
+        $this->artisan('cvc:initialize')->assertSuccessful();
+        $context = KnowledgeContext::query()
+            ->where('kind', KnowledgeContext::KIND_CONTEXT)
+            ->firstOrFail();
+        ScreenAccessPermission::query()->create([
+            'user_id' => $user->id,
+            'screen_key' => 'vault',
+            'access_level' => ScreenAccessLevel::Write,
+        ]);
+        $entityId = $this->actingAs($user)
+            ->postJson('/vault/documents', ['context_id' => $context->getKey()])
+            ->assertCreated()
+            ->json('document.id');
+        $pdf = "%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n";
+
+        $attachmentId = $this->actingAs($user)
+            ->post("/vault/entities/{$entityId}/attachments", [
+                'file' => UploadedFile::fake()->createWithContent('manual.pdf', $pdf),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->assertJsonPath('attachment.name', 'manual.pdf')
+            ->assertJsonPath('attachment.mimeType', 'application/pdf')
+            ->json('attachment.id');
+        $download = $this->actingAs($user)
+            ->get("/vault/attachments/{$attachmentId}")
+            ->assertOk()
+            ->assertHeader('x-content-type-options', 'nosniff');
+        self::assertSame($pdf, $download->streamedContent());
+
+        $this->actingAs($user)
+            ->post("/vault/entities/{$entityId}/attachments", [
+                'file' => UploadedFile::fake()->createWithContent('disfarçado.png', $pdf),
+            ], ['Accept' => 'application/json'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('file');
     }
 
     public function test_rf_04_reopens_the_persisted_workspace_without_undoing_content(): void
