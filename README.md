@@ -42,7 +42,7 @@ O projeto Compose se chama `rechi-os-cvc-local` e sobe `laravel.test`, `queue` (
 
 `node_modules` fica num volume do Docker, separado do host, entao instale e rode o npm sempre dentro de `laravel.test`. Uma variavel `COMPOSE_PROJECT_NAME` definida no shell tem precedencia sobre o `.env`; se ela existir, passe `-p rechi-os-cvc-local` aos comandos `docker compose`.
 
-Para abrir `/vault`, siga tambem o setup local do `crow-vault-canvas/README.md`: `CVC_ENABLED=true`, `php artisan cvc:initialize` e permissao `write` na tela `vault` para o usuario.
+Para abrir `/vault`, siga tambem o setup local do `crow-vault-canvas/README.md`: `CVC_ENABLED=true`, `php artisan cvc:initialize` e permissao `write` na tela `vault` para o usuario. O Docker usa `CVC_STORAGE_ROOT=/var/lib/cvc` em um volume nomeado privado, inicializado com UID/GID do Sail e modo `0700`; isso evita que o bind mount do Windows transforme arquivos privados em caminhos ilegíveis para o servidor ou a fila.
 
 No Windows sem Docker, use PHP 8.3, Composer, Node 24 e um MySQL/Redis locais, ajustando `DB_HOST` e `REDIS_HOST` para `127.0.0.1`.
 
