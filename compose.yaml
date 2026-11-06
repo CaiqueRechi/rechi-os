@@ -23,9 +23,12 @@ services:
             - '.:/var/www/html'
             - '../crow-vault-canvas:/var/www/crow-vault-canvas'
             - 'node-modules:/var/www/html/node_modules'
+            - 'cvc-storage:/var/lib/cvc'
         networks:
             - sail
         depends_on:
+            cvc-storage-init:
+                condition: service_completed_successfully
             mysql:
                 condition: service_healthy
             redis:
@@ -52,14 +55,26 @@ services:
         volumes:
             - '.:/var/www/html'
             - '../crow-vault-canvas:/var/www/crow-vault-canvas'
+            - 'cvc-storage:/var/lib/cvc'
         networks:
             - sail
         depends_on:
+            cvc-storage-init:
+                condition: service_completed_successfully
             mysql:
                 condition: service_healthy
             redis:
                 condition: service_healthy
         restart: unless-stopped
+    cvc-storage-init:
+        image: 'sail-8.5/app'
+        entrypoint: ['/bin/sh', '-c']
+        command:
+            - 'install -d -o ${WWWUSER} -g ${WWWGROUP} -m 0700 /var/lib/cvc'
+        network_mode: none
+        volumes:
+            - 'cvc-storage:/var/lib/cvc'
+        restart: 'no'
     mysql:
         image: 'mysql:8.4'
         ports:
@@ -115,4 +130,6 @@ volumes:
     sail-redis:
         driver: local
     node-modules:
+        driver: local
+    cvc-storage:
         driver: local
