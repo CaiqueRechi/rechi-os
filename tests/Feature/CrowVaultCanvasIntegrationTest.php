@@ -64,7 +64,7 @@ class CrowVaultCanvasIntegrationTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('cvc/vault', shouldExist: false)
                 ->where('vault.id', config('crow-vault-canvas.vault.id'))
-                ->where('vault.name', 'Crow Vault Canvas')
+                ->where('vault.name', 'Codex Noctarium')
                 ->has('vault.universes', 1)
                 ->where('vault.universes.0.name', 'Meu Universo')
                 ->has('vault.universes.0.contexts', 1)
