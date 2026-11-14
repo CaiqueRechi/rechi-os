@@ -47,6 +47,8 @@ class HandleInertiaRequests extends Middleware
                     'library' => $user->screenAccessLevel('library')->value,
                     'salem' => $user->screenAccessLevel('salem')->value,
                     'can_open_library' => $user->hasScreenAccess('library', ScreenAccessLevel::Read),
+                    'can_open_vault' => config('crow-vault-canvas.enabled', false)
+                        && $user->hasScreenAccess('vault', ScreenAccessLevel::Read),
                 ] : [],
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',

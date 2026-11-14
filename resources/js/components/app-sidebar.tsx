@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { FolderGit2, LayoutGrid, Library } from 'lucide-react';
+import { FolderGit2, LayoutGrid, Library, Network } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
@@ -13,8 +13,8 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
 import type { Auth, NavItem } from '@/types';
+import { dashboard } from '@/routes';
 
 const footerNavItems: NavItem[] = [
     {
@@ -40,6 +40,9 @@ export function AppSidebar() {
                       icon: Library,
                   },
               ]
+            : []),
+        ...(auth.screen_access?.can_open_vault
+            ? [{ title: 'Vault', href: '/vault', icon: Network }]
             : []),
     ];
 
