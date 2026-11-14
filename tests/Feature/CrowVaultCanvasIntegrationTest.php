@@ -16,6 +16,13 @@ class CrowVaultCanvasIntegrationTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['queue.default' => 'sync']);
+    }
+
     public function test_rf_14_redirects_guests_without_exposing_the_vault(): void
     {
         $this->get('/vault')
