@@ -19,8 +19,13 @@ class CreateAdminUser extends Command
      */
     public function handle(): int
     {
-        $email = (string) $this->argument('email');
-        $name = (string) $this->option('name');
+        $email = $this->argument('email');
+        $name = $this->option('name');
+
+        if (! is_string($email) || ! is_string($name)) {
+            return self::INVALID;
+        }
+
         $password = (string) $this->secret('Admin password');
 
         $validator = Validator::make([

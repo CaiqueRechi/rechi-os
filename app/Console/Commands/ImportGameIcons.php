@@ -15,7 +15,9 @@ class ImportGameIcons extends Command
 {
     public function handle(GameIconImporter $importer, GameDataCache $cache): int
     {
-        $mod = strtolower((string) $this->option('mod'));
+        $modOption = $this->option('mod');
+        $mod = is_string($modOption) ? strtolower($modOption) : '';
+        $repository = $this->option('calamity-repository');
         if (! in_array($mod, ['all', 'calamity', 'terraria'], true)) {
             $this->error('The --mod option must be all, calamity or terraria.');
 
@@ -25,7 +27,7 @@ class ImportGameIcons extends Command
         try {
             $result = $importer->import(
                 $mod,
-                $this->option('calamity-repository') ? (string) $this->option('calamity-repository') : null,
+                is_string($repository) && $repository !== '' ? $repository : null,
                 max(0, (int) $this->option('limit')),
                 (bool) $this->option('force'),
                 (bool) $this->option('dry-run'),

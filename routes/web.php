@@ -42,7 +42,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:managePortfolio')->name('dashboard.library.terraria.planner');
     Route::get('dashboard/biblioteca/terraria/timeline', GameTimelineDashboardController::class)
         ->middleware('can:managePortfolio')->name('dashboard.library.terraria.timeline');
-    Route::redirect('dashboard/game-planner', '/dashboard/biblioteca/terraria/timeline')
+    Route::get('dashboard/game-planner', fn () => redirect('/dashboard/biblioteca/terraria/timeline'))
         ->middleware('can:managePortfolio')->name('dashboard.game-planner');
 
     Route::prefix('dashboard/game-data')

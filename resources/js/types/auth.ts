@@ -17,6 +17,7 @@ export type Auth = {
         library?: 'none' | 'read' | 'write';
         salem?: 'none' | 'read' | 'write';
         can_open_library?: boolean;
+        can_open_vault?: boolean;
     };
 };
 

@@ -19,8 +19,10 @@ class SetScreenAccess extends Command
     public function handle(): int
     {
         $user = User::query()->where('email', $this->argument('email'))->first();
-        $level = ScreenAccessLevel::tryFrom((string) $this->argument('level'));
-        $screenKey = trim((string) $this->argument('screen'));
+        $levelArgument = $this->argument('level');
+        $screenArgument = $this->argument('screen');
+        $level = is_string($levelArgument) ? ScreenAccessLevel::tryFrom($levelArgument) : null;
+        $screenKey = is_string($screenArgument) ? trim($screenArgument) : '';
 
         if (! $user) {
             $this->error('Usuário não encontrado.');

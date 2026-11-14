@@ -8,8 +8,26 @@
         "framework"
     ],
     "license": "MIT",
+    "repositories": [
+        {
+            "name": "noctarium",
+            "type": "vcs",
+            "url": "https://github.com/CaiqueRechi/Codex-Noctarium.git"
+        },
+        {
+            "type": "path",
+            "url": "../crow-vault-canvas",
+            "options": {
+                "symlink": true,
+                "versions": {
+                    "caiquerechi/crow-vault-canvas": "dev-main"
+                }
+            }
+        }
+    ],
     "require": {
         "php": "^8.3",
+        "caiquerechi/crow-vault-canvas": "dev-cm-retomar-noctarium",
         "inertiajs/inertia-laravel": "^3.0",
         "laravel/chisel": "^0.1.0",
         "laravel/fortify": "^1.37.2",
