@@ -32,3 +32,17 @@ em [hostinger-deploy.md](hostinger-deploy.md).
 10. Rollback ou interrupcao segura em falha.
 
 Nenhum deploy externo deve ser executado sem autorizaçao explicita.
+
+## Codex Noctarium
+
+The production build installs the Noctarium revision recorded in
+`composer.lock`. Before enabling the vault, configure `CVC_STORAGE_ROOT`
+to an application-writable directory outside the domain document root.
+The default storage path is inside the application tree and is unsuitable
+when the application is deployed directly into `public_html`.
+
+After deployment and database migration, set `CVC_ENABLED=true` on the
+server, refresh the Laravel configuration cache, and run
+`php artisan cvc:initialize` if the configured vault has not been
+initialized. Grant the intended accounts read or write access to the
+`vault` screen and verify the route with an authorized account.
