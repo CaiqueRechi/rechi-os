@@ -28,7 +28,8 @@ class SnapshotGamePlanners extends Command
             )->all();
         }
         $path = 'game-data/snapshots/planners-'.now()->format('Ymd-His').'.json';
-        Storage::disk((string) $this->option('disk'))->put(
+        $disk = $this->option('disk');
+        Storage::disk(is_string($disk) ? $disk : null)->put(
             $path,
             (string) json_encode($snapshot, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
         );

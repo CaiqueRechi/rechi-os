@@ -23,7 +23,7 @@ class BuildGamePlanners extends Command
 
         try {
             $importer->import($path, true);
-            $result = $builder->build((string) $this->option('track'));
+            $result = $builder->build(is_string($track = $this->option('track')) ? $track : '');
             $cache->bump();
         } catch (Throwable $exception) {
             $this->error($exception->getMessage());
