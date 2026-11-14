@@ -13,8 +13,8 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import type { Auth, NavItem } from '@/types';
 import { dashboard } from '@/routes';
+import type { Auth, NavItem } from '@/types';
 
 const footerNavItems: NavItem[] = [
     {
